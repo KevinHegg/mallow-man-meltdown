@@ -1,0 +1,16 @@
+name: Push notification
+on:
+  push:
+    branches: [main]
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify via ntfy
+        run: |
+          MSG="${{ github.event.head_commit.message }}"
+          curl -s -o /dev/null \
+            -H "Title: Mallow Man Meltdown" \
+            -H "Tags: video_game" \
+            -d "Push to main: $MSG" \
+            https://ntfy.sh/mmm-push-3b919a7268
