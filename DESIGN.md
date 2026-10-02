@@ -83,6 +83,12 @@ leaves you goo'd. That tension IS the game.
      rooftop he swats straight down at you when you stand right under him:
      the boss dance is dart in, unload, dodge the swat).
   4. Total collapse: the money shot.
+- **Cotton-candy sticky traps** (his integrated attack — works in late flight
+  *and* on the rooftop): he flings a pink spun-sugar blast that bursts into a
+  sticky zone — a hanging cloud in the flight lane, a splattered patch on the
+  roof. Caught in one you're held, not gooed: no tiers, no mass, just stuck
+  until it dissipates (~8 s); a boost tears you free in flight. Trap-plus-goo
+  is the real danger, since held means you can't dodge.
 - Residents toss boost bubbles and jelly beans from windows as you pass —
   fly close to catch (risk/reward: close to buildings is where flak is thick).
 
