@@ -24,6 +24,11 @@ core of the game.
   grows beneath him per stage.
 - Keep the per-stage hitboxes exactly as they are. Keep staging HP
   thresholds unchanged.
+- Bigger glider (Kevin's call, agreed): scale the glider's ART up about
+  one-third so the banking, goo coat, list and wobble read clearly — it is
+  currently a postage stamp and all of prompt3/4's expressive work is lost
+  at that size. Art scale only: hitbox, aim and all mechanics unchanged.
+  Verify the bigger art doesn't overlap the BOOST/SHAKE buttons.
 - Mobile perf: pooled particles, capped counts, no per-frame allocations
   in the hot loop.
 
