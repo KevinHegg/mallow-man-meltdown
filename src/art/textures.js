@@ -442,8 +442,9 @@ export function buildTextures(scene) {
     g.strokePath();
   });
 
-  make('mountains', 680, 180, (g, w, h) => {
-    const range = (peaks, color) => {
+  // Two horizon layers that drift at different rates; the far ridge carries giant lollipop trees.
+  const mountainRange = (key, peaks, color, extra) =>
+    make(key, 680, 180, (g, w, h) => {
       for (const [x, ph, hw] of peaks) {
         g.fillStyle(color, 1);
         g.fillTriangle(x - hw, h, x + hw, h, x, h - ph);
@@ -454,10 +455,71 @@ export function buildTextures(scene) {
         g.fillTriangle(x - cw, capY, x + cw, capY, x, h - ph);
         for (let k = -1; k <= 1; k++) g.fillCircle(x + k * cw * 0.6, capY, cw * 0.28);
       }
-    };
-    range([[60, 120, 110], [200, 150, 130], [340, 128, 120], [480, 160, 140], [620, 125, 115]], 0xe6c9f5);
-    range([[0, 80, 100], [130, 100, 110], [270, 86, 95], [410, 106, 120], [560, 90, 105], [680, 80, 100]], 0xffbfdc);
+      extra?.(g, w, h);
+    });
+  mountainRange('mtn_far', [[60, 120, 110], [200, 150, 130], [340, 128, 120], [480, 160, 140], [620, 125, 115]], 0xe6c9f5, (g, w, h) => {
+    for (const [x, tall, r] of [[130, 118, 20], [415, 146, 26], [575, 108, 18]]) {
+      const cy = h - tall - r + 4;
+      g.fillStyle(0xcfa6e3, 1);
+      g.fillRect(x - 2, h - tall, 4, tall);
+      g.fillCircle(x, cy, r);
+      g.lineStyle(3, 0xe9d2f7, 1);
+      g.beginPath();
+      g.arc(x, cy, r * 0.55, 0, Math.PI * 1.5);
+      g.strokePath();
+    }
   });
+  mountainRange('mtn_near', [[0, 80, 100], [130, 100, 110], [270, 86, 95], [410, 106, 120], [560, 90, 105], [680, 80, 100]], 0xffbfdc);
+
+  // Wind streak: bright head on the right, fading tail (rotated to point away from the vanishing point).
+  make('streak', 64, 6, (g) => {
+    for (let i = 0; i < 16; i++) {
+      const a = Math.pow((i + 1) / 16, 1.6);
+      g.fillStyle(0xffffff, a * 0.45);
+      g.fillRect(i * 4, 0, 4, 6);
+      g.fillStyle(0xffffff, a);
+      g.fillRect(i * 4, 2, 4, 2);
+    }
+  });
+
+  // Fly-under arches spanning the valley (leg centres 500px apart; scaled to the valley in Valley.js).
+  const arch = (key, band, stripe) =>
+    make(key, 560, 700, (g, w, h) => {
+      const cx = 280;
+      const cy = 280;
+      const r = 250;
+      const t = 56;
+      for (const lx of [cx - r, cx + r]) {
+        g.fillStyle(band, 1);
+        g.fillRect(lx - t / 2, cy, t, h - cy);
+        g.fillStyle(stripe, 1);
+        for (let y = cy - 20; y < h; y += 34) g.fillPoints(pts([lx - t / 2, y + 18, lx + t / 2, y, lx + t / 2, y + 14, lx - t / 2, y + 32]), true);
+        g.fillStyle(PAL.ink, 0.15);
+        g.fillRect(lx + t / 2 - 8, cy, 8, h - cy);
+      }
+      g.lineStyle(t, band, 1);
+      g.beginPath();
+      g.arc(cx, cy, r, Math.PI, Math.PI * 2);
+      g.strokePath();
+      g.lineStyle(t, stripe, 1);
+      for (let a = Math.PI + 0.06; a < Math.PI * 2 - 0.05; a += 0.2) {
+        g.beginPath();
+        g.arc(cx, cy, r, a, a + 0.09);
+        g.strokePath();
+      }
+      g.lineStyle(3, darker(band === 0xffffff ? 0xe8213d : band, 0.35), 1);
+      for (const rr of [r + t / 2, r - t / 2]) {
+        g.beginPath();
+        g.arc(cx, cy, rr, Math.PI, Math.PI * 2);
+        g.strokePath();
+      }
+      blob(g, [{ e: [cx, cy - r, 70, 54] }], PAL.candy[1], darker(PAL.candy[1]), 3);
+      g.fillStyle(0xffffff, 0.85);
+      g.fillCircle(cx - 12, cy - r - 10, 3);
+      g.fillCircle(cx + 10, cy - r + 4, 2.4);
+    });
+  arch('arch0', 0xffffff, 0xe8213d); // candy cane
+  arch('arch1', PAL.licorice, PAL.licoriceDark); // licorice
 
   // ---------- Evil Marshmallow Man parts ----------
   make('boss_body', 180, 164, (g) => {

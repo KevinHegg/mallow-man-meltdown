@@ -31,6 +31,7 @@ export class Glider extends Phaser.Events.EventEmitter {
     this.targetX = x;
     this.targetY = y;
     this.list = 0;
+    this.bank = 0;
     this.roll = 0;
     this.t = 0;
     this.spin = 0;
@@ -157,6 +158,7 @@ export class Glider extends Phaser.Events.EventEmitter {
     let wobble = 0;
     if (this.tier === 'caked') wobble = Math.sin(this.t * 9) * 0.07;
     if (shaking) wobble = Math.sin(this.t * 46) * 0.38;
+    this.bank = bank;
     this.roll = this.list + bank + wobble;
     const jitter = shaking ? Math.sin(this.t * 53) * 5 : 0;
     this.view.setPosition(this.x + jitter, this.y + Math.sin(this.t * 2.4) * 2.5);
@@ -324,6 +326,15 @@ export class Glider extends Phaser.Events.EventEmitter {
     this.scene.cameras.main.shake(140, 0.006);
     Sfx.bonk();
     return true;
+  }
+
+  // Visual-only attitude for the flight view: a smoother, deeper bank and a pitch on the art.
+  // The hitbox, aim and goo physics keep using `roll`, so mechanics are unchanged.
+  setAttitude(bank, pitch) {
+    const off = this.busy ? 0 : bank - this.bank;
+    const sy = 1 + pitch * 0.14;
+    this.sprite.setRotation(off).setScale(1, sy);
+    this.gooLayer.setRotation(off).setScale(1, sy);
   }
 
   addCharge(kind) {

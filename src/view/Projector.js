@@ -8,13 +8,14 @@ export class Projector {
     this.focal = focal;
     this.planeH = planeH; // how far below eye level the glider's flight plane sits (world units)
     this.camX = 0; // decorative camera sway; follows the glider a little
+    this.tilt = 0; // decorative horizon shift in px (climb → horizon drops); decor only
   }
 
-  // World point → screen. Decor only (it includes the camera sway).
+  // World point → screen. Decor only (it includes the camera sway and horizon tilt).
   project(x, y, z, out) {
     const s = this.focal / z;
     out.x = this.cx + (x - this.camX) * s;
-    out.y = this.horizonY + y * s;
+    out.y = this.horizonY + this.tilt + y * s;
     out.s = s;
     return out;
   }

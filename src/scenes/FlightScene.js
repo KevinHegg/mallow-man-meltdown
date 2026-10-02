@@ -13,6 +13,7 @@ import { drawSky, floatText, flushTrash, makeFx, rand, randInt, routeCollisions 
 import { Projector } from '../view/Projector.js';
 import { Valley } from '../view/Valley.js';
 import { PropPool, ShadowPool } from '../view/Pools.js';
+import { Wind } from '../view/Wind.js';
 import { Sfx } from '../sfx.js';
 
 const FOCAL = 420;
@@ -39,7 +40,9 @@ export class FlightScene extends Phaser.Scene {
     this.nextObstacle = 1.4;
     this.nextGoo = 2.2;
     this.nextPickup = 7;
+    this.nextArch = rand(8, 12); // first arch early, then every ~25–35 s
     this.pt = {};
+    this.att = { bank: 0, pitch: 0 }; // eased visual attitude of the glider
 
     drawSky(this, [0xffb8dc, 0xffcfe6, 0xffe6f2, 0xfff0f6]);
     this.city = new City(this, { height: 92, frost: this.run.frost });
@@ -53,6 +56,7 @@ export class FlightScene extends Phaser.Scene {
       bottomY: this.city.top,
     });
     this.speed = (SPAWN_DEPTH - FOCAL) / APPROACH_TIME; // world units per second
+    this.wind = new Wind(this, this.proj, this.valley);
 
     // The boss sits on the horizon and grows with progress: he is the progress bar.
     this.distant = this.add.container(W / 2, horizonY).setDepth(DEPTH.distant);
@@ -75,6 +79,11 @@ export class FlightScene extends Phaser.Scene {
     this.goo = new GooMallows(this, { cityTop: this.city.top + 12, onCity: (m) => this.gooLandsOnCity(m) });
     this.beanViews = new ShadowPool(this, 16, DEPTH.beans);
     this.gooViews = new ShadowPool(this, MAX_GOO + 2, DEPTH.goo);
+    this.beanScale = (y) => {
+      const s = this.proj.planeScaleAt(y);
+      return s < 0.06 ? 0 : Math.min(s, 1.2);
+    };
+    this.gooScale = (y) => Phaser.Math.Clamp(this.proj.planeScaleAt(y), 0.15, 1.25);
     this.propPool = new PropPool(this, {
       ledge: { shape: { type: 'rectangle', width: 180, height: 58 }, count: 4 },
       licorice: { shape: { type: 'rectangle', width: 236, height: 22 }, count: 8 },
@@ -107,7 +116,7 @@ export class FlightScene extends Phaser.Scene {
 
   placeBoss() {
     const s = Phaser.Math.Linear(0.22, 0.55, this.progress);
-    this.distant.setScale(s).setY(this.proj.horizonY - 40 * s); // cloud centre sits on the horizon
+    this.distant.setScale(s).setY(this.proj.horizonY + this.proj.tilt - 40 * s); // cloud centre sits on the horizon
   }
 
   update(_time, delta) {
@@ -117,23 +126,33 @@ export class FlightScene extends Phaser.Scene {
     const boosting = this.glider.boostT > 0;
     const speed = this.speed * (boosting ? 1.8 : 1) * (this.arriving ? 1.6 : 1);
 
-    const sway = (this.glider.x - W / 2) * 0.12;
+    // Flight feel (visual only): ease a bank from lateral velocity and a pitch from vertical
+    // velocity; the horizon dips on climbs and the camera leans into turns and bends.
+    const gl = this.glider;
+    const att = this.att;
+    const bankTarget = gl.busy ? 0 : Phaser.Math.Clamp(gl.vx * 0.0012, -0.35, 0.35);
+    const pitchTarget = gl.busy ? 0 : Phaser.Math.Clamp(-gl.vy / 450, -1, 1);
+    att.bank += (bankTarget - att.bank) * Math.min(1, dt * 6);
+    att.pitch += (pitchTarget - att.pitch) * Math.min(1, dt * 5);
+    this.proj.tilt = att.pitch * 16;
+    const sway = (gl.x - W / 2) * 0.12 + att.bank * 45 + this.valley.lean * 0.25;
     this.proj.camX += (sway - this.proj.camX) * Math.min(1, dt * 4);
     this.valley.update(dt, speed);
+    const intensity = Phaser.Math.Clamp((speed / this.speed - 1) * 0.7 + 0.18 + Math.hypot(gl.vx, gl.vy) / 1400, 0, 1);
+    this.wind.update(dt, speed, intensity);
     this.updateProps(dt, speed);
 
     this.controls.update(dt);
-    this.glider.update(dt);
+    gl.update(dt);
+    gl.setAttitude(att.bank, att.pitch);
     this.beans.update(dt);
     this.goo.update(dt);
     this.city.update(dt);
 
-    const proj = this.proj;
-    this.beanViews.sync(this.beans.items, (y) => {
-      const s = proj.planeScaleAt(y);
-      return s < 0.06 ? 0 : Math.min(s, 1.2);
-    });
-    this.gooViews.sync(this.goo.items, (y) => Phaser.Math.Clamp(proj.planeScaleAt(y), 0.15, 1.25));
+    this.beanViews.sync(this.beans.items, this.beanScale);
+    this.gooViews.sync(this.goo.items, this.gooScale);
+    // the boss is a far landmark: he slides with the camera's heading through bends
+    this.distant.x = W / 2 - FOCAL * this.valley.s0 * 0.5 - this.proj.camX * 0.02;
 
     if (!this.ended && !this.arriving) {
       this.elapsed += dt;
@@ -181,6 +200,10 @@ export class FlightScene extends Phaser.Scene {
     if (this.nextPickup <= 0) {
       this.spawnPickup();
       this.nextPickup = rand(7, 10);
+    }
+    if (this.elapsed >= this.nextArch) {
+      this.valley.launchArch();
+      this.nextArch = this.elapsed + rand(25, 35);
     }
   }
 
