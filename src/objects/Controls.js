@@ -9,6 +9,7 @@ export class Controls {
     this.scene = scene;
     this.glider = glider;
     this.fire = fire;
+    this.enabled = true; // off while the launch slingshot owns the pointer
     this.steerId = null;
     this.lastX = 0;
     this.lastY = 0;
@@ -16,7 +17,7 @@ export class Controls {
     const input = scene.input;
     input.on('pointerdown', (p, over) => {
       Sfx.unlock();
-      if (over.length) return; // HUD buttons handle themselves
+      if (over.length || !this.enabled) return; // HUD buttons handle themselves
       fire();
       if (this.steerId === null) {
         this.steerId = p.id;
@@ -46,7 +47,7 @@ export class Controls {
 
   update(dt) {
     const k = this.keys;
-    if (!k) return;
+    if (!k || !this.enabled) return;
     const sx = (k.RIGHT.isDown || k.D.isDown ? 1 : 0) - (k.LEFT.isDown || k.A.isDown ? 1 : 0);
     const sy = (k.DOWN.isDown || k.S.isDown ? 1 : 0) - (k.UP.isDown || k.W.isDown ? 1 : 0);
     if (sx || sy) this.glider.steerBy(sx * TUNE.keySpeed * dt, sy * TUNE.keySpeed * dt);

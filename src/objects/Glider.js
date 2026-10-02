@@ -278,13 +278,36 @@ export class Glider extends Phaser.Events.EventEmitter {
     for (const s of this.splats) s.m *= TUNE.boostKeep;
     this.vy = Math.min(this.vy, 0) - 620;
     this.targetY = clamp(this.targetY - 200, this.bounds.top, this.bounds.bottom);
-    this.fx.bubble.explode(18, this.x, this.y + 20);
-    this.scene.tweens.killTweensOf(this.shield);
-    this.shield.setAlpha(0.85).setScale(3.2);
-    this.scene.tweens.add({ targets: this.shield, alpha: 0, scale: 4.4, duration: 800, ease: 'Quad.easeIn' });
+    this.bubbleBurst();
     Sfx.boost();
     this.emit('boost');
     return true;
+  }
+
+  // The boost's look (bubble spray + shield flash), also used by the slingshot launch.
+  bubbleBurst(alpha = 0.85) {
+    this.fx.bubble.explode(18, this.x, this.y + 20);
+    this.scene.tweens.killTweensOf(this.shield);
+    this.shield.setAlpha(alpha).setScale(3.2);
+    this.scene.tweens.add({ targets: this.shield, alpha: 0, scale: 4.4, duration: 800, ease: 'Quad.easeIn' });
+  }
+
+  // Slingshot launch: the sling places the glider directly (art scale and tilt included)
+  // until it hands control back with release().
+  hold(x, y, rot = 0, scale = 1, vx = 0, vy = 0) {
+    this.x = this.targetX = x;
+    this.y = this.targetY = y;
+    this.vx = vx;
+    this.vy = vy;
+    this.view.setPosition(x, y).setRotation(rot).setScale(ART_SCALE * scale);
+    this.syncBody();
+  }
+
+  release() {
+    this.autopilot = null;
+    this.vx = 0;
+    this.vy = 0;
+    this.view.setScale(ART_SCALE);
   }
 
   shake() {

@@ -91,7 +91,7 @@ export class EndScene extends Phaser.Scene {
     const by = H * 0.66;
     makeButton(this, W / 2, by, 280, 66, 'FLY AGAIN', () => {
       this.registry.set('run', newRun());
-      this.scene.start('Flight');
+      this.scene.start('Flight', { title: false }); // explicit: Phaser keeps a scene's last start data otherwise
     });
     const checkpoint = this.registry.get('bossCheckpoint');
     if (!win && from === 'Boss' && checkpoint) {

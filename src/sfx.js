@@ -140,6 +140,17 @@ export const Sfx = {
     [520, 660, 880, 1180].forEach((f, i) => tone(f, f * 1.4, 0.12, { vol: 0.14, delay: i * 0.05 }));
     noise(0.4, { vol: 0.1, freq: 3000, type: 'highpass' });
   },
+  // rubbery creak ticks while the slingshot bands stretch (k: 0 slack … 1 full pull)
+  stretch(k) {
+    if (!ready('stretch', 0.05)) return;
+    tone(150 + 260 * k, 175 + 300 * k, 0.07, { type: 'triangle', vol: 0.06 });
+  },
+  boing(power) {
+    if (!ready('boing', 0.2)) return;
+    const osc = tone(560, 150, 0.5, { vol: 0.24 });
+    vibrato(osc, 24, 70, 0.5);
+    noise(0.35, { vol: 0.1 + 0.1 * power, freq: 500, to: 3600, type: 'bandpass', q: 1.2 });
+  },
   shake() {
     if (!ready('shake')) return;
     const osc = tone(180, 260, 0.75, { type: 'sawtooth', vol: 0.08 });

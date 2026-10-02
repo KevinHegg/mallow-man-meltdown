@@ -7,7 +7,7 @@
 - [x] prompt5.md — the boss fights back: staged attacks and melt drama — DONE
 - [x] prompt6.md — boss appearance: marshmallow lumps + frosting mortar re-skin — DONE
 - [x] prompt7.md — paint the world: procedural richness pass toward the poster look — DONE
-- [ ] prompt8.md — the slingshot launch: toy opening moment — PENDING
+- [x] prompt8.md — the slingshot launch: toy opening moment — DONE
 - [ ] prompt9.md — altitude matters: meaningful up/down flight gameplay — PENDING
 - [ ] prompt10.md — the bail-out: continuous rooftop finale, kill the bars — PENDING
 - [ ] prompt11.md — sticky traps and the flood finale — PENDING

@@ -31,8 +31,8 @@ npm run dev
 
 | URL | Effect |
 | --- | --- |
-| `?scene=boss` | Title tap goes straight to the boss fight |
-| `?scene=win` / `?scene=lose` | Title tap goes to the end screen |
+| `?scene=boss` | Skips the slingshot and goes straight to the boss fight |
+| `?scene=win` / `?scene=lose` | Goes straight to the end screen |
 | `?debug` | Shows Matter physics bodies |
 
 In dev builds the game instance is available as `window.__game`.
@@ -41,6 +41,7 @@ In dev builds the game instance is available as `window.__game`.
 
 | | Touch / mouse | Keyboard |
 | --- | --- | --- |
+| Launch (slingshot) | Drag back anywhere to stretch and aim, let go; or just tap | Space / Enter |
 | Steer | Drag anywhere (relative, like a trackpad) | Arrows / WASD |
 | Fire jelly beans | Every tap/click (a second finger can tap-fire while the first steers) | Space |
 | Bubble Boost | BOOST button | Z |
@@ -48,6 +49,7 @@ In dev builds the game instance is available as `window.__game`.
 
 ## How it plays
 
+- **Launch**: every flight opens with the glider loaded in a candy slingshot (candy-cane forks, frosting bands, gumdrop base), with the title over it on first load. Pull back to stretch the bands and aim (sprinkle dots show where it will go; pulling left flings right), then let go. A plain tap launches at a default pull. The fling is a free first boost: a speed burst that fades into cruise over about 3 s. Control is yours about 0.85 s after release.
 - **Flight** (~40 s): fly into the horizon down a gently curving candy valley, with sugar-cube towers and gumdrop houses streaming past on both sides and candy-cane arches sweeping overhead. The glider banks into turns and pitches on climbs and dives (the horizon dips and rises with it), and wind streaks pick up with speed. The boss sits on his cloud at the horizon and grows as you get closer (he is the progress meter). Dodge sugar-cube ledges, licorice gates and gumdrops as they come at you out of the distance (bonks knock you back). Grab soda bubbles (+1 Boost) and sugar shakers (+1 Shake) while they hover at mid-depth. The boss lobs goo-mallows at you and at the city.
 - **Boss**: built from marshmallows glued together with frosting, he patrols his cloud and fights differently as he melts. PRISTINE: slow, smug, aimed throws. SAGGING: lobbed goo bombs that burst mid-air into a widening splatter. ARM OFF!: the arm tears off in a goo burst, and he trembles, throws fast and wild, and swats at you up close. COLLAPSING: feeble, drooping lobs with long pauses. Jelly beans have short range, so you have to dive in, fire, and dive back out. Drips, sloughing chunks and his melt puddle grow each stage until he melts away and a fluff flood fills the screen.
 - **Goo tiers** (dusted / splattered / caked): you can see them on the glider. Drips, then blobs, then a heavy green coat, plus a lean and wobble that grow with each tier; CAKED also pulses a green glow at the screen edges. Each splat adds mass, so the glider responds more slowly. The weight also drags you down, and off-centre goo lists you sideways, which also skews your aim.
@@ -68,6 +70,7 @@ src/
     Glider.js          handling model: mass-aware spring, goo splats, CoG list, cleanses, spiral
     GooCoat.js         pooled slime sprites that show the goo tier on the glider
     Controls.js        drag-steer / tap-fire / keyboard
+    Slingshot.js       the opening launch: stretch, aim, fling, hand-over
     Projectiles.js     jelly beans + goo-mallows (Matter sensors)
     City.js            skyline + frost meter
     MarshmallowMan.js  boss rig, throw AI (ballistic aim), 4-stage melt
@@ -79,7 +82,7 @@ src/
   ui/
     Hud.js             bars, goo/frost chips, Boost/Shake buttons, banners
     helpers.js         text/sky/button helpers, particles, collision router, run state
-  scenes/              Boot (textures + title), Flight, Boss, End
+  scenes/              Boot (textures), Flight (opens with the slingshot + title), Boss, End
 ```
 
 Gameplay is strictly 2D on the screen plane. Depth is only decorative: in Flight, a tiny projector (`screen = horizon + (x, y) / z * focal`) draws the valley and scales goo, beans and props by depth, while collisions stay in screen space. Most balance lives in `TUNE` in `src/config.js`.

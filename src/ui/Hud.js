@@ -54,7 +54,22 @@ export class Hud {
     this.cache = {};
     this.vignette = this.makeVignette(W, H);
     this.lastNow = scene.time.now;
+    this.shown = 1;
+    this.chrome = [panel, this.title, this.status, this.bar, this.barIcon, this.gooChip.g, this.gooChip.t, this.frostChip.g, this.frostChip.t];
     this.update();
+  }
+
+  // Fades the HUD chrome (0 hidden … 1 shown). The BOOST/SHAKE buttons ignore presses while
+  // hidden, so a gesture that starts where they will appear never triggers them.
+  setShown(v) {
+    if (v === this.shown) return;
+    this.shown = v;
+    for (const o of this.chrome) o.setAlpha(v);
+    for (const btn of [this.boostBtn, this.shakeBtn]) {
+      btn.pips.setAlpha(v);
+      btn.alpha = null;
+      btn.zone.input.enabled = v > 0.5;
+    }
   }
 
   // Soft green glow around the screen edges, baked once per screen size; pulses while CAKED.
@@ -124,7 +139,7 @@ export class Hud {
         scene.tweens.add({ targets: [bg, img], scale: '*=0.85', duration: 70, yoyo: true });
       }
     });
-    return { bg, img, lab, pips, x, y, r, count: -1, alpha: null };
+    return { bg, img, lab, pips, zone, x, y, r, count: -1, alpha: null };
   }
 
   // True when the glider's art (not its hitbox) sits under this button.
@@ -150,7 +165,7 @@ export class Hud {
       }
     }
     // dim when unavailable; fade further while the glider flies underneath so both stay readable
-    const a = (enabled && count > 0 ? 1 : 0.4) * (covered ? 0.45 : 1);
+    const a = (enabled && count > 0 ? 1 : 0.4) * (covered ? 0.45 : 1) * this.shown;
     if (btn.alpha !== a) {
       btn.alpha = a;
       btn.bg.setAlpha(a);

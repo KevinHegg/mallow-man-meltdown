@@ -7,6 +7,7 @@ import { Glider } from '../objects/Glider.js';
 import { Beans, GooMallows } from '../objects/Projectiles.js';
 import { City } from '../objects/City.js';
 import { Controls } from '../objects/Controls.js';
+import { Slingshot } from '../objects/Slingshot.js';
 import { buildBossRig } from '../objects/MarshmallowMan.js';
 import { Hud } from '../ui/Hud.js';
 import { drawSky, floatText, flushTrash, makeFx, rand, randInt, routeCollisions } from '../ui/helpers.js';
@@ -22,13 +23,14 @@ const APPROACH_TIME = 4.2; // …and take this long to reach the glider's plane
 const HOVER_DEPTH = 1.7 * FOCAL; // pickups drift here for a while before passing
 const WALL_INSET = 40; // valley walls sit this far in from the screen edges at the glider's plane
 const MAX_GOO = 10;
+const KICK_DECAY = 0.9; // s: the slingshot's speed burst fades into cruise
 
 export class FlightScene extends Phaser.Scene {
   constructor() {
     super('Flight');
   }
 
-  create() {
+  create(data = {}) {
     const { width: W, height: H } = this.scale;
     this.run = this.registry.get('run');
     this.trash = [];
@@ -43,6 +45,7 @@ export class FlightScene extends Phaser.Scene {
     this.nextArch = rand(8, 12); // first arch early, then every ~25–35 s
     this.pt = {};
     this.att = { bank: 0, pitch: 0 }; // eased visual attitude of the glider
+    this.kick = 0; // launch speed burst: extra speed fraction, decaying to 0
 
     drawSky(this, [0xf9a8d4, 0xffc8e3, 0xffe3f0, 0xfff1f6]);
     this.city = new City(this, { height: 92, frost: this.run.frost });
@@ -110,8 +113,30 @@ export class FlightScene extends Phaser.Scene {
     routeCollisions(this, hits);
     routeCollisions(this, { 'glider|prop': hits['glider|prop'] }, 'collisionactive');
 
+    // Every flight opens in the slingshot; the valley holds still until the glider is flung.
+    this.sling = new Slingshot(this, {
+      glider: this.glider,
+      x: W / 2,
+      seatY: planeY - 54,
+      homeY: planeY,
+      apexY: this.bounds.top + 20,
+      logoY: Math.min(H * 0.13, horizonY - 200), // keep the boss on the horizon in view below it
+      title: !!data.title,
+      onLaunch: (power) => this.launched(power),
+    });
+    this.hud.setShown(0);
+    this.controls.enabled = false;
     this.cameras.main.fadeIn(400, 255, 255, 255);
-    this.hud.banner('FLY!', 'Down the candy valley to his cloud', 1300);
+  }
+
+  // The fling doubles as a free first boost: a speed burst (stronger pull, bigger burst) that
+  // decays into cruise and nudges progress along while it lasts.
+  launched(power) {
+    this.kick = 0.5 + power;
+    this.time.delayedCall(250, () => {
+      this.hud.banner('FLY!', 'Down the candy valley to his cloud', 1300);
+      Sfx.start();
+    });
   }
 
   placeBoss() {
@@ -123,8 +148,21 @@ export class FlightScene extends Phaser.Scene {
     const dt = Math.min(delta / 1000, 0.05);
     const W = this.scale.width;
     flushTrash(this);
+    const sling = this.sling;
+    if (sling) {
+      sling.update(dt);
+      this.hud.setShown(sling.hudAlpha);
+      this.controls.enabled = !sling.holding;
+      if (sling.gone) {
+        this.sling = null;
+        this.hud.setShown(1);
+      }
+    }
+    const waiting = !!sling?.waiting; // still in the slingshot: the world holds still
+    const holding = !!sling?.holding; // the sling (not the player) moves the glider
+    this.kick *= Math.exp(-dt / KICK_DECAY);
     const boosting = this.glider.boostT > 0;
-    const speed = this.speed * (boosting ? 1.8 : 1) * (this.arriving ? 1.6 : 1);
+    const speed = waiting ? 0 : this.speed * (boosting ? 1.8 : 1) * (this.arriving ? 1.6 : 1) * (1 + this.kick);
 
     // Flight feel (visual only): ease a bank from lateral velocity and a pitch from vertical
     // velocity; the horizon dips on climbs and the camera leans into turns and bends.
@@ -139,11 +177,13 @@ export class FlightScene extends Phaser.Scene {
     this.proj.camX += (sway - this.proj.camX) * Math.min(1, dt * 4);
     this.valley.update(dt, speed);
     const intensity = Phaser.Math.Clamp((speed / this.speed - 1) * 0.7 + 0.18 + Math.hypot(gl.vx, gl.vy) / 1400, 0, 1);
-    this.wind.update(dt, speed, intensity);
+    if (!waiting) this.wind.update(dt, speed, intensity);
     this.updateProps(dt, speed);
 
-    this.controls.update(dt);
-    gl.update(dt);
+    if (!holding) {
+      this.controls.update(dt);
+      gl.update(dt);
+    }
     gl.setAttitude(att.bank, att.pitch);
     this.beans.update(dt);
     this.goo.update(dt);
@@ -154,9 +194,9 @@ export class FlightScene extends Phaser.Scene {
     // the boss is a far landmark: he slides with the camera's heading through bends
     this.distant.x = W / 2 - FOCAL * this.valley.s0 * 0.5 - this.proj.camX * 0.02;
 
-    if (!this.ended && !this.arriving) {
+    if (!this.ended && !this.arriving && !waiting) {
       this.elapsed += dt;
-      this.progress = Math.min(1, this.progress + (dt * (boosting ? 1.6 : 1)) / TUNE.flightTime);
+      this.progress = Math.min(1, this.progress + (dt * (boosting ? 1.6 : 1) * (1 + 0.6 * this.kick)) / TUNE.flightTime);
       this.spawn(dt);
       this.placeBoss();
       if (this.progress >= 1) this.arrive();

@@ -186,6 +186,59 @@ function wetGoo(g, shapes, main = 0) {
   g.strokeCircle(mx + mr * 0.25, my + mr * 0.2, br);
 }
 
+// The launch slingshot's frame: band anchors (fork tips) sit `span` apart on the `tipY` row.
+export const SLING = { w: 300, h: 236, tipY: 40, span: 220 };
+
+// A lit candy-cane tube along polylines: outline, shaded underside, lit body, specular streak.
+// Stripes alternate along each path's length.
+function caneTube(g, paths, r) {
+  const RED = [0xe8213d, PAL.licoriceDark, 0xff8596];
+  const WHITE = [0xfbf3f6, 0xd9c3d1, 0xffffff];
+  const samples = [];
+  for (const path of paths) {
+    let s = 0;
+    for (let i = 0; i < path.length; i++) {
+      if (i) s += Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y);
+      samples.push({ x: path[i].x, y: path[i].y, c: s % 20 < 8 ? RED : WHITE });
+    }
+  }
+  g.fillStyle(PAL.ink, 1);
+  for (const p of samples) g.fillCircle(p.x, p.y, r + 2.5);
+  for (const p of samples) {
+    g.fillStyle(p.c[1], 1);
+    g.fillCircle(p.x, p.y, r);
+  }
+  for (const p of samples) {
+    g.fillStyle(p.c[0], 1);
+    g.fillCircle(p.x - r * 0.15, p.y - r * 0.12, r * 0.8);
+  }
+  for (const p of samples) {
+    g.fillStyle(p.c[2], 1);
+    g.fillCircle(p.x - r * 0.45, p.y - r * 0.35, r * 0.25);
+  }
+}
+
+const quadPath = (x0, y0, cx, cy, x1, y1, n) => {
+  const out = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const u = 1 - t;
+    out.push({ x: u * u * x0 + 2 * u * t * cx + t * t * x1, y: u * u * y0 + 2 * u * t * cy + t * t * y1 });
+  }
+  return out;
+};
+
+// A cane's crook: an arc from the fork tip over the top and a short way down the far side.
+const crookPath = (x, y, dir, R, n) => {
+  const out = [];
+  for (let i = 0; i <= n; i++) {
+    const a = -Math.PI * (i / n);
+    out.push({ x: x + dir * R - dir * R * Math.cos(a), y: y + R * Math.sin(a) });
+  }
+  out.push({ x: x + dir * 2 * R, y: y + 5 }, { x: x + dir * 2 * R, y: y + 10 });
+  return out;
+};
+
 // Volumetric cloud: shaded underside, body in shadow, lit tops and sunlit crowns.
 function cloudPuffs(g, circles, dy = 0) {
   g.fillStyle(0xcab3de, 1);
@@ -473,29 +526,6 @@ export function buildTextures(scene) {
     });
   wall('wallL', false);
   wall('wallR', true);
-
-  make('farsky', 540, 512, (g, w, h) => {
-    const puffCloud = (x, y, r, color, alpha) => {
-      g.fillStyle(color, alpha);
-      g.fillCircle(x, y, r);
-      g.fillCircle(x - r * 0.9, y + r * 0.25, r * 0.7);
-      g.fillCircle(x + r * 0.95, y + r * 0.2, r * 0.75);
-      g.fillCircle(x + r * 0.3, y - r * 0.35, r * 0.65);
-    };
-    const r2 = new Phaser.Math.RandomDataGenerator(['sky']);
-    for (let i = 0; i < 12; i++) {
-      const x = r2.between(20, w - 20);
-      const y = r2.between(0, h);
-      const r = r2.between(18, 40);
-      const color = r2.pick([0xffffff, 0xffe3f1, 0xe1f4ff]);
-      // draw wrapped copies so the tile seams are invisible
-      for (const dy of [-h, 0, h]) puffCloud(x, y + dy, r, color, 0.55);
-    }
-    for (let i = 0; i < 40; i++) {
-      g.fillStyle(0xffffff, r2.realInRange(0.4, 0.9));
-      g.fillCircle(r2.between(0, w), r2.between(2, h - 2), r2.realInRange(0.8, 2));
-    }
-  });
 
   make('cloud', 200, 120, (g) => {
     cloudPuffs(g, [[50, 62, 30], [90, 46, 38], [138, 54, 32], [168, 68, 22], [100, 72, 30], [28, 74, 18]], 10);
@@ -883,5 +913,41 @@ export function buildTextures(scene) {
     g.fillEllipse(110, 32, 50, 8);
     frost(g, [[72, 40, 6], [80, 44, 5], [214, 38, 6], [222, 43, 4]]);
     frost(g, [[176, 46, 5], [184, 44, 4]], FROST_PINK, FROST_PINK_EDGE);
+  });
+
+  // The launch slingshot: candy-cane forks on a gumdrop base, frosting where the bands tie on.
+  make('sling', SLING.w, SLING.h, (g, w) => {
+    const cx = w / 2;
+    const tipL = cx - SLING.span / 2;
+    const tipR = cx + SLING.span / 2;
+    const ty = SLING.tipY;
+    contactShadow(g, cx, 229, 210, 14);
+    caneTube(
+      g,
+      [
+        quadPath(cx, 196, cx, 176, cx, 150, 24),
+        quadPath(cx, 152, tipL + 6, 158, tipL, ty, 90),
+        quadPath(cx, 152, tipR - 6, 158, tipR, ty, 90),
+        crookPath(tipL, ty, -1, 12, 24),
+        crookPath(tipR, ty, 1, 12, 24),
+      ],
+      12,
+    );
+    aoDot(g, cx, 166, 16);
+    const base = PAL.candy[0];
+    blob(g, [{ e: [cx, 204, 150, 62] }, { rr: [cx - 74, 204, 148, 26, 12] }], base, darker(base), 3);
+    g.fillStyle(darker(base, 0.15), 1);
+    g.fillEllipse(cx + 34, 212, 70, 30);
+    g.fillStyle(base, 1);
+    g.fillEllipse(cx - 6, 200, 120, 44);
+    g.fillStyle(lighter(base, 0.55), 0.8);
+    g.fillEllipse(cx - 40, 190, 34, 12);
+    g.fillStyle(0xffffff, 0.85);
+    for (let k = 0; k < 22; k++) g.fillCircle(rng.between(cx - 62, cx + 62), rng.between(186, 222), rng.realInRange(1, 2.2));
+    // frosting: a collar where the stem enters the gumdrop, a band at the fork, wraps at the tips
+    frost(g, beads(cx - 15, 178, cx + 15, 178, 5, 5), FROST_PINK, FROST_PINK_EDGE);
+    frost(g, beads(cx - 20, 150, cx + 20, 150, 5.5, 6));
+    frostDrip(g, cx - 8, 152, 10, 6);
+    for (const x of [tipL, tipR]) frost(g, beads(x - 13, ty + 9, x + 13, ty + 9, 4.5, 5), FROST_PINK, FROST_PINK_EDGE);
   });
 }
