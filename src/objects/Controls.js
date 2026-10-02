@@ -47,6 +47,8 @@ export class Controls {
 
   update(dt) {
     const k = this.keys;
+    // a held dive needs the steering finger (or Down/S) still held: lifting it lets the comet go
+    this.glider.diveHeld = this.enabled && (this.steerId !== null || !!(k && (k.DOWN.isDown || k.S.isDown)));
     if (!k || !this.enabled) return;
     const sx = (k.RIGHT.isDown || k.D.isDown ? 1 : 0) - (k.LEFT.isDown || k.A.isDown ? 1 : 0);
     const sy = (k.DOWN.isDown || k.S.isDown ? 1 : 0) - (k.UP.isDown || k.W.isDown ? 1 : 0);

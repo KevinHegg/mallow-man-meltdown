@@ -46,6 +46,8 @@ export class FlightScene extends Phaser.Scene {
   create(data = {}) {
     const { width: W, height: H } = this.scale;
     this.run = this.registry.get('run');
+    this.run.tips ??= {};
+    this.run.bossHp ??= TUNE.bossHP;
     this.trash = [];
     this.props = new Set();
     this.elapsed = 0;
@@ -129,6 +131,9 @@ export class FlightScene extends Phaser.Scene {
     this.controls = new Controls(this, this.glider, { fire: () => this.fire(), boost, shake });
 
     this.glider.on('tier', (tier, prev) => this.onTier(tier, prev));
+    // fly dirty: a goo comet streaks to the boss on the horizon and splats into his HP pool
+    this.glider.cometTarget = () => ({ x: this.distant.x, y: this.distant.y - 130 * this.distant.scale });
+    this.glider.on('cometHit', (tier, x, y) => this.cometHit(tier, x, y));
     this.glider.on('crashed', () => this.lose('spiral'));
 
     const hits = {
@@ -468,6 +473,36 @@ export class FlightScene extends Phaser.Scene {
     if (order.indexOf(tier) > order.indexOf(prev)) {
       Sfx.gooWorse(tier);
       floatText(this, this.glider.x, this.glider.y - 50, `${TIER_LABEL[tier]}!`, TIER_COLOR[tier], 24);
+      // the first time this run you're loaded, teach the dive-bomb (once)
+      if (this.glider.loaded && !this.run.tips.dive && !this.arriving) {
+        this.run.tips.dive = true;
+        this.hud.banner('HOLD YOUR DIVE', 'to splat your goo at the boss!', 2600);
+      }
+    }
+  }
+
+  // The comet lands: tier-scaled damage into the shared pool, capped so the flight can take at
+  // most one stage off him (the rooftop always matters).
+  cometHit(tier, x, y) {
+    const run = this.run;
+    const dealt = TUNE.bossHP - run.bossHp;
+    const dmg = Math.max(0, Math.min(TUNE.splatDamage[tier], TUNE.flightSplatCap - dealt));
+    run.bossHp -= dmg;
+    run.stats.comets++;
+    run.stats.gooDamage += dmg;
+    this.fx.gob.explode(16, x, y);
+    this.fx.puff.explode(8, x, y);
+    this.fx.drip.explode(10, x, y);
+    Sfx.gooImpact();
+    this.cameras.main.shake(180, 0.008);
+    const rig = this.distantRig;
+    rig.parts.forEach((p) => p.setTint(0xa8f07a));
+    this.time.delayedCall(260, () => rig.parts.forEach((p) => p.setTint(0xf2dcff)));
+    this.tweens.add({ targets: rig.root, angle: { from: -6, to: 6 }, duration: 70, yoyo: true, repeat: 3 });
+    floatText(this, x, y - 30, dmg > 0 ? `SPLAT! −${dmg}` : 'SAVE IT FOR THE ROOF!', dmg > 0 ? '#5bd16b' : '#ff5e8a', dmg > 0 ? 30 : 22);
+    if (dmg > 0 && TUNE.bossHP - run.bossHp >= TUNE.flightSplatCap) {
+      rig.eyes.setTexture('boss_eyes_droopy'); // he'll be sagging when you get there
+      this.hud.banner("HE'S SAGGING!", 'Finish him on the roof', 1600);
     }
   }
 

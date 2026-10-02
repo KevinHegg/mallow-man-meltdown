@@ -5,6 +5,7 @@ import * as Phaser from 'phaser';
 import { CAT, DEPTH, MASK, TUNE } from '../config.js';
 import { mix } from '../art/textures.js';
 import { Sfx } from '../sfx.js';
+import { txt } from '../ui/helpers.js';
 import { GooCoat } from './GooCoat.js';
 
 const HALF_SPAN = 46;
@@ -23,6 +24,9 @@ export function tierFor(goo) {
 // Art-only list and wobble per tier (clean, dusted, splattered, caked) so the handling
 // penalty reads on screen. Hitbox, aim and drift keep using the physical `list`/`roll`.
 const TIER_LEVEL = { clean: 0, dusted: 1, splattered: 2, caked: 3 };
+// The goo comet: out to the boss on the horizon, then back to the cruise row, clean (s).
+const COMET_OUT = 0.55;
+const COMET_BACK = 1.05;
 const ART_LIST = [0, 0.05, 0.12, 0.2];
 const ART_WOBBLE = [0, 0.025, 0.05, 0.06];
 
@@ -63,6 +67,13 @@ export class Glider extends Phaser.Events.EventEmitter {
     this.autopilot = null;
     this.thermal = false; // inside a candy-cane thermal (set by the flight each frame)
     this.stuck = false; // held by a cotton-candy trap (set by the flight each frame)
+    // fly dirty: while loaded, a held dive arms a goo comet; letting go launches it
+    this.homeY = y;
+    this.diveHeld = false; // the steering finger (or Down) is held (set by Controls)
+    this.divePush = 0; // how far the steering has been pushed past the floor
+    this.diveCharge = 0; // 0 … 1 = armed
+    this.comet = null;
+    this.cometTarget = null; // () => { x, y } on the horizon (set by the flight)
     this.tier = 'clean';
 
     this.view = scene.add.container(x, y).setDepth(DEPTH.glider).setScale(ART_SCALE);
@@ -70,7 +81,11 @@ export class Glider extends Phaser.Events.EventEmitter {
     this.gooLayer = scene.add.container(0, 0);
     this.shield = scene.add.image(0, 0, 'bubble').setScale(4).setAlpha(0);
     this.strands = scene.add.image(0, 0, 'cc_strands').setScale(0.8).setVisible(false);
-    this.view.add([this.sprite, this.gooLayer, this.strands, this.shield]);
+    this.glow = scene.add.image(0, 0, 'dive_glow').setAlpha(0);
+    this.view.add([this.glow, this.sprite, this.gooLayer, this.strands, this.shield]);
+    this.cue = txt(scene, x, y, 'SPLAT!', 30, '#7be05a', { stroke: '#2a6b2a', strokeThickness: 9 })
+      .setDepth(DEPTH.glider + 0.6)
+      .setVisible(false);
     this.coat = new GooCoat(scene, this.gooLayer, fx);
 
     this.body = scene.matter.add.rectangle(x, y, 92, 40, {
@@ -86,7 +101,12 @@ export class Glider extends Phaser.Events.EventEmitter {
   }
 
   get busy() {
-    return this.spiraling || this.crashed;
+    return this.spiraling || this.crashed || !!this.comet;
+  }
+
+  // SPLATTERED or CAKED: enough goo to throw at the boss
+  get loaded() {
+    return this.tier === 'splattered' || this.tier === 'caked';
   }
 
   get canAct() {
@@ -96,6 +116,11 @@ export class Glider extends Phaser.Events.EventEmitter {
   steerBy(dx, dy) {
     if (!this.canAct) return;
     const b = this.bounds;
+    // pushing on past the floor is what a "held dive" means (goo sinking the glider never counts)
+    if (dy > 0) {
+      const over = this.targetY + dy - b.bottom;
+      if (over > 0) this.divePush = Math.min(160, this.divePush + over);
+    } else if (dy < 0) this.divePush = Math.max(0, this.divePush + dy);
     this.targetX = clamp(this.targetX + dx, b.left, b.right);
     this.targetY = clamp(this.targetY + dy, b.top, b.bottom);
   }
@@ -113,6 +138,10 @@ export class Glider extends Phaser.Events.EventEmitter {
     this.bonkCd -= dt;
     this.boostT -= dt;
     if (this.crashed) return;
+    if (this.comet) {
+      this.updateComet(dt);
+      return;
+    }
     if (this.spiraling) {
       this.updateSpiral(dt);
       return;
@@ -206,6 +235,7 @@ export class Glider extends Phaser.Events.EventEmitter {
     const g = this.goo;
     this.coat.update(dt, g, g > 0.01 ? clamp(torque / g, -1, 1) : 0);
     this.applyArt();
+    this.updateDive(dt);
 
     const doomed = tier === 'caked' && this.boosts === 0 && this.shakes === 0 && !shaking && !this.autopilot;
     if (doomed) {
@@ -390,6 +420,88 @@ export class Glider extends Phaser.Events.EventEmitter {
       this.fx.drip.explode(12, this.x, this.y);
       Sfx.crash();
       this.emit('crashed');
+    }
+  }
+
+  // Fly dirty: hold a dive (push into the floor) while loaded to arm; let go (or pull up) to launch.
+  updateDive(dt) {
+    const charging = this.loaded && this.diveHeld && this.divePush >= TUNE.divePush && this.canAct;
+    const wasArmed = this.diveCharge >= 1;
+    if (charging) this.diveCharge = Math.min(1, this.diveCharge + dt / TUNE.diveArm);
+    else if (wasArmed && this.loaded && this.canAct && (!this.diveHeld || this.divePush < 20)) {
+      this.launchComet();
+      return;
+    } else this.diveCharge = Math.max(0, this.diveCharge - dt * 2.5);
+    if (!this.diveHeld) this.divePush = 0;
+    const armed = this.diveCharge >= 1;
+    if (armed && !wasArmed) Sfx.armed();
+    // the cue: a green glow that builds while you hold, then SPLAT! when armed (unmistakable)
+    const pulse = 0.5 + 0.5 * Math.sin(this.t * 18);
+    this.glow.setAlpha(this.diveCharge * (armed ? 0.75 + 0.25 * pulse : 0.6)).setScale(0.8 + this.diveCharge * 0.5 + (armed ? pulse * 0.12 : 0));
+    if (this.diveCharge > 0.05) this.sprite.setTint(mix(0xffffff, 0x9dff6a, this.diveCharge * (armed ? 0.5 + 0.3 * pulse : 0.4)));
+    this.cue.setVisible(armed).setPosition(this.x, this.y - 70 - pulse * 6).setScale(1 + pulse * 0.12);
+  }
+
+  launchComet() {
+    this.comet = { t: 0, x0: this.x, y0: this.y, tier: this.tier, hit: false, bx: 0, by: 0, trail: 0 };
+    this.diveCharge = 0;
+    this.divePush = 0;
+    this.stall = 0;
+    this.vx = 0;
+    this.vy = 0;
+    this.cue.setVisible(false);
+    this.scene.cameras.main.shake(140, 0.005);
+    Sfx.comet();
+    this.emit('comet', this.comet.tier);
+  }
+
+  // Out to the boss as a goo comet (shrinking into the distance, trailing slime), splat, and
+  // bounce back to the cruise row clean. About 1.6 s out of action: the tempo cost.
+  updateComet(dt) {
+    const c = this.comet;
+    c.t += dt;
+    const tgt = this.cometTarget ? this.cometTarget() : { x: this.x, y: this.bounds.top };
+    let x;
+    let y;
+    let s;
+    if (c.t < COMET_OUT) {
+      const e = Phaser.Math.Easing.Quadratic.In(c.t / COMET_OUT);
+      x = Phaser.Math.Linear(c.x0, tgt.x, e);
+      y = Phaser.Math.Linear(c.y0, tgt.y, e);
+      s = 1 - 0.8 * e;
+      c.trail += dt * 40;
+      while (c.trail >= 1) {
+        c.trail -= 1;
+        this.fx.drip.emitParticleAt(this.x + Phaser.Math.Between(-10, 10), this.y + 20);
+      }
+      this.view.setRotation(Math.atan2(tgt.x - c.x0, c.y0 - tgt.y));
+    } else {
+      if (!c.hit) {
+        c.hit = true;
+        c.bx = tgt.x;
+        c.by = tgt.y;
+        this.splats = [];
+        this.tier = 'clean';
+        this.emit('cometHit', c.tier, tgt.x, tgt.y);
+      }
+      const e = Phaser.Math.Easing.Sine.Out(Math.min(1, (c.t - COMET_OUT) / COMET_BACK));
+      x = Phaser.Math.Linear(c.bx, c.x0, e);
+      y = Phaser.Math.Linear(c.by, this.homeY, e);
+      s = 0.2 + 0.8 * e;
+      this.view.setRotation(0);
+    }
+    this.x = x;
+    this.y = y;
+    this.view.setPosition(x, y).setScale(ART_SCALE * s);
+    this.sprite.setTint(c.hit ? 0xffffff : 0x9dff6a);
+    this.glow.setAlpha(c.hit ? 0 : 0.8);
+    this.coat.update(dt, this.goo, 0);
+    this.syncBody();
+    if (c.t >= COMET_OUT + COMET_BACK) {
+      this.comet = null;
+      this.targetX = x;
+      this.targetY = y;
+      this.view.setScale(ART_SCALE);
     }
   }
 

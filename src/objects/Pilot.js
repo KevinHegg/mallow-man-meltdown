@@ -89,6 +89,24 @@ export class Pilot extends Phaser.Events.EventEmitter {
     return HOPPER;
   }
 
+  // SPLATTERED or CAKED: enough goo to fling at the boss
+  get loaded() {
+    return this.tier === 'splattered' || this.tier === 'caked';
+  }
+
+  // Fly dirty: hurl every bit of carried goo at him. Returns the throw, or null if not loaded.
+  fling() {
+    if (!this.canAct || !this.loaded) return null;
+    const shot = { tier: this.tier, x: this.x, y: this.y - 70 };
+    this.fx.gob.explode(12, this.x, this.y - 60);
+    this.splats = [];
+    this.tier = 'clean';
+    this.vx = 0;
+    Sfx.fling();
+    this.emit('tier', 'clean', shot.tier);
+    return shot;
+  }
+
   get canAct() {
     return !this.autopilot && this.shakeT <= 0;
   }
@@ -228,7 +246,7 @@ export class Pilot extends Phaser.Events.EventEmitter {
 // On-foot controls. Touch/mouse: drag anywhere to run (relative, like the glider) and keep the
 // finger down to keep firing. Keyboard: arrows/A-D run, hold Space to fire, X shakes.
 export class PilotControls {
-  constructor(scene, pilot, { shake }) {
+  constructor(scene, pilot, { shake, fling }) {
     this.pilot = pilot;
     this.enabled = true;
     this.dragId = null;
@@ -251,8 +269,9 @@ export class PilotControls {
     input.on('pointerup', release);
     input.on('pointerupoutside', release);
     if (input.keyboard) {
-      this.keys = input.keyboard.addKeys('A,D,LEFT,RIGHT,SPACE,X');
+      this.keys = input.keyboard.addKeys('A,D,LEFT,RIGHT,SPACE,X,F');
       this.keys.X.on('down', () => this.enabled && shake());
+      this.keys.F.on('down', () => this.enabled && fling?.());
     }
   }
 

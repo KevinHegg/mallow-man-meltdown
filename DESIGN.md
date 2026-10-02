@@ -51,6 +51,30 @@ the left wing lists you left. Players feel it in their thumb.
   the city's spreading frost is the visible lose meter. No HUD bars: the world
   is the interface.
 
+### Fly dirty: carried goo is ammo (the inversion — experimental, prompt13)
+Goo isn't only punishment: **the dirtier you fly, the harder you hit.**
+SPLATTERED or CAKED = **loaded** (DUSTED is a graze — not enough to throw, so
+you want to get *properly* hit).
+- **Flight — the dive-bomb.** Loaded, **hold a dive** (keep pulling down into
+  the floor ~0.8 s; a quick dip under a gate never does it): the glider glows
+  green and "SPLAT!" appears. **Let go** and it streaks to the boss's cloud as a
+  goo comet, splats him, and bounces back to cruise **clean** (~1.6 s out of
+  action — the tempo cost). Pull down, let go: the slingshot gesture again.
+- **Rooftop — FLING.** A button beside SHAKE, live only while loaded: the pilot
+  hurls all his goo at the boss in one arcing glob and comes up clean.
+- **Damage** (in jelly-bean equivalents): SPLATTERED ≈ 7, CAKED ≈ 17, into **one
+  boss HP pool for the whole run**. The flight's comets are capped at one stage
+  (25), so the rooftop always matters — at most he starts it already sagging.
+- Beans are unchanged; they're the safe route. The inversion *adds* a route:
+  get dirty → spend it → clean → get dirty again. First time you're loaded in
+  each phase, one banner teaches it ("HOLD YOUR DIVE…", "FLING YOUR GOO!").
+- Note the old tension still applies, sharpened: goo that hits you is goo that
+  doesn't frost the city.
+- **Playtest status (bots, prompt13):** dirty play wins faster *and* with less
+  city frost than clean play in every run — a dominant strategy, not yet a
+  gamble. The real choice found so far is *how* dirty (waiting for CAKED is a
+  coin-flip). See prompts/prompt13-response.md before building on it.
+
 ## Cleanses (three verbs, three currencies)
 - **Time**: goo slowly drips/melts off. Costs patience.
 - **Bubble boost**: exhaust blast sheds a *portion* of goo (+ altitude/dodge).

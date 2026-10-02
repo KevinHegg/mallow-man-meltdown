@@ -227,7 +227,9 @@ export function newRun() {
     frost: Array(7).fill(0),
     boosts: TUNE.boostCharges,
     shakes: TUNE.shakeCharges,
-    stats: { beans: 0, pops: 0, hits: 0, splats: 0, startedAt: Date.now() },
+    bossHp: TUNE.bossHP, // one pool for the whole run: goo comets in flight chip it before the roof
+    tips: {}, // one-time teaching banners already shown this run
+    stats: { beans: 0, pops: 0, hits: 0, splats: 0, comets: 0, flings: 0, gooDamage: 0, startedAt: Date.now() },
   };
 }
 

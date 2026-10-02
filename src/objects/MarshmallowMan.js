@@ -378,9 +378,10 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
     this.scene.cameras.main.shake(120, 0.005);
   }
 
-  hit(x, y) {
+  // n: HP removed (a jelly bean is 1; a flung load of goo is several)
+  hit(x, y, n = 1) {
     if (this.dead) return false;
-    this.hp = Math.max(0, this.hp - 1);
+    this.hp = Math.max(0, this.hp - n);
     this.flashT = 0.08;
     this.rig.parts.forEach((part) => part.setTint(0xff9cc4));
     this.fx.mdrip.explode(2, x, y);
@@ -392,12 +393,22 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
     return true;
   }
 
-  setStage(n) {
+  // He starts the rooftop with whatever the run's goo comets left him (already sagging, maybe).
+  startAt(hp) {
+    this.hp = Phaser.Math.Clamp(hp, 1, this.maxHp);
+    const f = this.hpFrac;
+    const stage = f <= 0.25 ? 3 : f <= 0.5 ? 2 : f <= 0.75 ? 1 : 0;
+    if (stage > 0) this.setStage(stage, true);
+  }
+
+  setStage(n, quiet = false) {
     this.stage = n;
     const sc = this.scene;
     const r = this.rig;
-    sc.cameras.main.shake(260, 0.012);
-    this.fx.mdrip.explode(14, this.x, this.homeY - 150);
+    if (!quiet) {
+      sc.cameras.main.shake(260, 0.012);
+      this.fx.mdrip.explode(14, this.x, this.homeY - 150);
+    }
     const to = (props, duration = 700, ease = 'Back.easeOut') => sc.tweens.add({ targets: this.pose, ...props, duration, ease });
     if (n === 1) {
       to({ bodySX: 1.08, bodySY: 0.88, headDrop: 10, headRot: -0.12, armRest: 0.16, puddle: PUDDLE[1] });
@@ -415,9 +426,9 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
     }
     if (n < 4) {
       this.makeHitbox();
-      Sfx.stage();
+      if (!quiet) Sfx.stage();
     }
-    this.emit('stage', n, STAGE_NAMES[n]);
+    if (!quiet) this.emit('stage', n, STAGE_NAMES[n]);
   }
 
   dropArm() {

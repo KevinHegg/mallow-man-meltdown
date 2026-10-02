@@ -151,6 +151,26 @@ export const Sfx = {
     noise(0.45, { vol: 0.22, freq: 1400, to: 250, type: 'bandpass', q: 0.9 });
     tone(620, 310, 0.3, { vol: 0.12 });
   },
+  // fly dirty: the goo comet is armed, launched, lands; the pilot flings his goo
+  armed() {
+    if (!ready('armed', 0.4)) return;
+    arp([523, 784, 1047], 0.05, { type: 'square', vol: 0.06 });
+  },
+  comet() {
+    if (!ready('comet', 0.3)) return;
+    noise(0.55, { vol: 0.2, freq: 300, to: 3000, type: 'bandpass', q: 1.1 });
+    tone(220, 660, 0.4, { type: 'sawtooth', vol: 0.07 });
+  },
+  gooImpact() {
+    if (!ready('gooImpact', 0.15)) return;
+    noise(0.4, { vol: 0.42, freq: 1200, to: 150 });
+    tone(180, 55, 0.35, { type: 'triangle', vol: 0.3 });
+  },
+  fling() {
+    if (!ready('fling', 0.2)) return;
+    noise(0.3, { vol: 0.2, freq: 500, to: 2600, type: 'bandpass', q: 1.4 });
+    tone(260, 520, 0.18, { type: 'triangle', vol: 0.12 });
+  },
   // a building thaws in the warm fluff
   thaw() {
     if (!ready('thaw', 0.12)) return;

@@ -107,6 +107,11 @@ export const TUNE = {
   stallTime: 2.6, // seconds caked with no cleanses before the death spiral
   thermalLift: 420, // px/s a candy-cane thermal raises the steering target while you're inside
   thermalDrip: 6, // goo drips off this many times faster inside a thermal
+  // fly dirty: carried goo is ammo. SPLATTERED or CAKED = loaded.
+  splatDamage: { splattered: 7, caked: 17 }, // boss HP per spent load (bean-equivalents)
+  flightSplatCap: 25, // the flight's goo comets can take at most one stage off him
+  diveArm: 0.8, // s of held dive (pushing into the floor) to arm a goo comet
+  divePush: 50, // px of steering pushed past the floor before a dive counts (a gate dip never does)
   trapHold: 0.15, // inside a cotton-candy trap: top speed × this (a boost tears the glider free)
   trapSpring: 0.2, // …and the glider's pull toward your steering × this
 

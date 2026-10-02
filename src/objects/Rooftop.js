@@ -11,12 +11,14 @@ const SPLATS = 8;
 const SPLAT_LIFE = 3.5;
 
 export class Rooftop {
-  constructor(scene, { roofY }) {
+  // keepClear: the HUD control slots ({x, y}); no window is drawn near them.
+  constructor(scene, { roofY, keepClear = [] }) {
     const { width: W, height: H } = scene.scale;
     this.scene = scene;
     this.roofY = roofY;
     this.top = roofY - 42;
-    const key = `roof_${W}x${H}_${roofY}`;
+    this.keepClear = keepClear;
+    const key = `roof_${W}x${H}_${roofY}_${keepClear.length}`;
     if (!scene.textures.exists(key)) {
       const g = scene.add.graphics();
       g.translateCanvas(0, -this.top);
@@ -76,11 +78,20 @@ export class Rooftop {
       for (let bx = (r % 2) * 30; bx < W; bx += 60) g.lineBetween(bx, by - 22, bx, by);
     }
     // Windows that read as architecture, not as buttons: framed sash windows with panes, a
-    // frosting lintel, shutters and a flower-box sill, set into the brick. Two columns in the middle
-    // of the facade, so the screen corners (where the HUD controls sit) stay plain wall.
-    for (const wy of [fy + 46, fy + 176]) {
+    // frosting lintel, shutters and a flower-box sill, set into the brick — and never near a
+    // control: any spot that would come within reach of a HUD slot stays plain wall.
+    const placed = [];
+    const clear = (r) =>
+      this.keepClear.every((c) => r.x1 < c.x - c.rx || r.x0 > c.x + c.rx || r.y1 < c.y - c.up || r.y0 > c.y + c.down) &&
+      placed.every((p) => r.x1 < p.x0 - 10 || r.x0 > p.x1 + 10);
+    for (const wy of [fy + 40, fy + 170]) {
       if (wy + 104 > H) continue;
-      for (const cx of [W * 0.33, W * 0.67]) this.window(g, cx, wy);
+      for (const cx of [W * 0.33, W * 0.67, W * 0.5]) {
+        const r = { x0: cx - 60, x1: cx + 60, y0: wy - 20, y1: wy + 104 };
+        if (!clear(r)) continue;
+        placed.push(r);
+        this.window(g, cx, wy);
+      }
     }
     g.fillStyle(PAL.ink, 0.12);
     g.fillRect(0, H - 70, W, 70);

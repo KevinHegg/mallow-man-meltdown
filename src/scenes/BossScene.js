@@ -11,7 +11,7 @@ import { Pilot, PilotControls } from '../objects/Pilot.js';
 import { Rooftop } from '../objects/Rooftop.js';
 import { CottonCandy } from '../objects/CottonCandy.js';
 import { Residents } from '../objects/Residents.js';
-import { Hud } from '../ui/Hud.js';
+import { Hud, roofSlots } from '../ui/Hud.js';
 import { drawSky, floatText, flushTrash, makeFx, rand, randInt, routeCollisions, snapshot } from '../ui/helpers.js';
 import { CloudCover } from '../view/CloudCover.js';
 import { Sfx } from '../sfx.js';
@@ -37,6 +37,7 @@ export class BossScene extends Phaser.Scene {
   create(data = {}) {
     const { width: W, height: H } = this.scale;
     this.run = this.registry.get('run');
+    this.run.tips ??= {};
     if (!data.retry) this.registry.set('bossCheckpoint', snapshot(this.run));
     this.trash = [];
     this.ended = false;
@@ -64,7 +65,7 @@ export class BossScene extends Phaser.Scene {
       c.speed = near ? rand(18, 26) : rand(6, 10);
       this.decor.push(c);
     }
-    this.roof = new Rooftop(this, { roofY });
+    this.roof = new Rooftop(this, { roofY, keepClear: Object.values(roofSlots(W, H)) });
     this.fx = makeFx(this);
     this.residents = new Residents(this, this.city, DEPTH.city + 1.2);
     this.traps = new CottonCandy(this, { mode: 'roof', roofY, fx: this.fx });
@@ -76,6 +77,8 @@ export class BossScene extends Phaser.Scene {
     const k = scale / 0.85;
     this.boss = new MarshmallowMan(this, { x: W / 2, y: this.city.top + 6 - 142 * k, scale, fx: this.fx, ground: true });
     this.boss.cityTargets = this.city.centers();
+    this.boss.startAt(this.run.bossHp ?? TUNE.bossHP); // one HP pool: the flight's goo comets count
+    this.flung = []; // goo globs in the air (FLING)
 
     this.pilot = new Pilot(this, W / 2, roofY, { left: 40, right: W - 40 }, this.run, this.fx);
     this.beans = new Beans(this);
@@ -86,8 +89,9 @@ export class BossScene extends Phaser.Scene {
     });
 
     const shake = () => this.pilot.shake();
-    this.hud = new Hud(this, { mode: 'roof', glider: this.pilot, city: this.city, onShake: shake });
-    this.controls = new PilotControls(this, this.pilot, { shake });
+    const fling = () => this.fling();
+    this.hud = new Hud(this, { mode: 'roof', glider: this.pilot, city: this.city, onShake: shake, onFling: fling });
+    this.controls = new PilotControls(this, this.pilot, { shake, fling });
 
     this.pilot.on('tier', (tier, prev) => this.onTier(tier, prev));
     this.boss.on('throw', (x, y, vx, vy, opts) => this.spawnBossGoo(x, y, vx, vy, opts));
@@ -202,6 +206,7 @@ export class BossScene extends Phaser.Scene {
     this.beans.update(dt);
     this.goo.update(dt);
     this.updateBossGoo(dt);
+    this.updateFlung(dt);
     this.city.update(dt);
     this.roof.update(dt);
     this.residents.update(dt);
@@ -287,6 +292,47 @@ export class BossScene extends Phaser.Scene {
     this.traps.fire(hand.x, hand.y, tx, this.roofY - 6, T);
   }
 
+  // Fly dirty: the pilot hurls all his goo at the boss in one arcing glob (tier-scaled damage).
+  fling() {
+    if (this.ended || this.arrival) return false;
+    const shot = this.pilot.fling();
+    if (!shot) return false;
+    const caked = shot.tier === 'caked';
+    const img = this.add.image(shot.x, shot.y, 'gcoat').setScale(caked ? 2.2 : 1.5).setDepth(DEPTH.goo + 1);
+    this.flung.push({ img, tier: shot.tier, x0: shot.x, y0: shot.y, t: 0 });
+    this.run.stats.flings++;
+    return true;
+  }
+
+  updateFlung(dt) {
+    const T = 0.6;
+    const boss = this.boss;
+    for (let i = this.flung.length - 1; i >= 0; i--) {
+      const f = this.flung[i];
+      f.t += dt;
+      const u = Math.min(1, f.t / T);
+      const tx = boss.x;
+      const ty = boss.homeY - 150 * boss.scale;
+      f.img
+        .setPosition(Phaser.Math.Linear(f.x0, tx, u), Phaser.Math.Linear(f.y0, ty, u) - 160 * 4 * u * (1 - u))
+        .setRotation(f.t * 8);
+      if (Math.random() < dt * 30) this.fx.drip.emitParticleAt(f.img.x, f.img.y);
+      if (u >= 1) {
+        this.flung.splice(i, 1);
+        f.img.destroy();
+        const dmg = TUNE.splatDamage[f.tier];
+        if (boss.hit(tx, ty, dmg)) {
+          this.run.stats.gooDamage += dmg;
+          this.fx.gob.explode(16, tx, ty);
+          this.fx.drip.explode(10, tx, ty);
+          Sfx.gooImpact();
+          this.cameras.main.shake(160, 0.008);
+          floatText(this, tx, ty - 60, `SPLAT! −${dmg}`, '#5bd16b', 30);
+        }
+      }
+    }
+  }
+
   fire() {
     const shot = this.pilot.tryFire();
     if (!shot) return;
@@ -319,6 +365,11 @@ export class BossScene extends Phaser.Scene {
     this.goo.kill(goo);
     this.fx.drip.explode(6, goo.x, goo.y);
     this.run.stats.splats++;
+    // the first goo on the roof this run: your goo is ammo here too (once)
+    if (!this.run.tips.fling) {
+      this.run.tips.fling = true;
+      this.hud.banner('FLING YOUR GOO!', 'Get properly splattered, then hit FLING', 2600);
+    }
   }
 
   beanHitsBoss(bean) {

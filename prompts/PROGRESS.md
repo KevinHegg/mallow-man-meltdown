@@ -12,4 +12,4 @@
 - [x] prompt10.md — the bail-out: continuous rooftop finale, kill the bars — DONE
 - [x] prompt11.md — sticky traps and the flood finale — DONE
 - [x] prompt12.md — UI legibility pass: windows that read as UI, flight controls hidden by art, hopper pips — DONE
-- [ ] prompt13.md — fly dirty: the goo inversion experiment (goo is ammo; dive-bomb + FLING) — PENDING
+- [x] prompt13.md — fly dirty: the goo inversion experiment (goo is ammo; dive-bomb + FLING) — DONE

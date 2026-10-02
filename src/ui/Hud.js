@@ -5,12 +5,23 @@ import { Sfx } from '../sfx.js';
 
 const D = DEPTH.hud;
 
+// Where the rooftop's controls sit, with how far each reaches (plate, shadow, pips, label): the
+// roof's facade keeps its windows clear of these.
+export function roofSlots(W, H) {
+  const y = H - 74;
+  return {
+    jar: { x: 62, y, rx: 34, up: 50, down: 52 },
+    fling: { x: W - 166, y, rx: 52, up: 50, down: 58 },
+    shake: { x: W - 62, y, rx: 52, up: 70, down: 58 },
+  };
+}
+
 // No HUD bars (DESIGN.md: "the world is the interface"): progress is the boss growing on the
 // horizon, his health is his melting body. What's left: the goo and frost chips, the cleanse
 // buttons, banners and warnings.
 export class Hud {
   // mode: 'flight' (glider: BOOST + SHAKE) | 'roof' (pilot on foot: SHAKE only)
-  constructor(scene, { mode, glider, city, onBoost, onShake }) {
+  constructor(scene, { mode, glider, city, onBoost, onShake, onFling }) {
     this.scene = scene;
     this.mode = mode;
     this.glider = glider;
@@ -23,11 +34,13 @@ export class Hud {
     this.frostChip = this.chip(W - 62, 18, 'right');
 
     const btnY = mode === 'roof' ? H - 74 : city.top - 64;
+    const slots = roofSlots(W, H);
     this.boostBtn = mode === 'roof' ? null : this.actionButton(62, btnY, 'pk_boost', 'BOOST', onBoost);
     this.shakeBtn = this.actionButton(W - 62, btnY, 'pk_shake', 'SHAKE', onShake);
-    this.buttons = this.boostBtn ? [this.boostBtn, this.shakeBtn] : [this.shakeBtn];
-    // on foot, the blaster's bean hopper gets a meter in the corner BOOST used to hold
-    this.hopper = mode === 'roof' ? this.hopperMeter(62, btnY) : null;
+    // on foot: FLING (your goo is ammo) beside SHAKE, and the bean hopper's jar where BOOST was
+    this.flingBtn = mode === 'roof' ? this.actionButton(slots.fling.x, btnY, 'pk_fling', 'FLING', onFling) : null;
+    this.buttons = [this.boostBtn, this.flingBtn, this.shakeBtn].filter(Boolean);
+    this.hopper = mode === 'roof' ? this.hopperMeter(slots.jar.x, btnY) : null;
 
     this.bannerTitle = txt(scene, W / 2, H * 0.4, '', 46, '#ff5e8a', { stroke: PAL.inkHex, strokeThickness: 10 })
       .setDepth(D + 5)
@@ -167,7 +180,7 @@ export class Hud {
   refreshButton(btn, count, max, enabled) {
     if (btn.count !== count) {
       btn.count = count;
-      this.drawPips(btn, count, max);
+      if (max > 0) this.drawPips(btn, count, max); // no pips on a button without charges
     }
     // unavailable = greyed icon and label on the same solid plate (never see-through)
     const usable = enabled && count > 0;
@@ -252,6 +265,12 @@ export class Hud {
     const ready = gl.canAct;
     if (this.boostBtn) this.refreshButton(this.boostBtn, gl.boosts, TUNE.boostMax, ready);
     this.refreshButton(this.shakeBtn, gl.shakes, TUNE.shakeMax, ready);
+    if (this.flingBtn) {
+      this.refreshButton(this.flingBtn, gl.loaded ? 1 : 0, 0, ready);
+      // loaded: the button breathes so you notice it's live
+      const s = gl.loaded && ready ? 1 + Math.sin(this.scene.time.now / 140) * 0.06 : 1;
+      this.flingBtn.img.setScale(0.82 * s);
+    }
     if (this.hopper) this.drawHopper(gl.ammo, gl.hopperMax);
 
     const now = this.scene.time.now;

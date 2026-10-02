@@ -1365,4 +1365,23 @@ export function buildTextures(scene) {
     g.fillRoundedRect(5, 4, 5, h - 14, 2.5);
     g.fillRect(13, 5, 8, 3);
   });
+
+  // ---------- Fly dirty: goo as ammo ----------
+  // FLING button icon: a glob of goo with an up-arrow
+  make('pk_fling', 60, 60, (g, w) => {
+    wetGoo(g, [{ c: [30, 36, 15] }, { c: [20, 42, 9] }, { c: [41, 41, 9] }, { c: [30, 49, 7] }]);
+    g.fillStyle(PAL.ink, 1);
+    g.fillTriangle(30, 3, 16, 20, 44, 20);
+    g.fillRect(25, 18, 10, 10);
+    g.fillStyle(0xffffff, 1);
+    g.fillTriangle(30, 7, 20, 18, 40, 18);
+    g.fillRect(27, 17, 6, 9);
+  });
+  // the loaded glider's glow while a dive is held (soft green halo)
+  make('dive_glow', 200, 130, (g, w, h) => {
+    for (let i = 0; i < 12; i++) {
+      g.fillStyle(0xb8ff7a, 0.05 + i * 0.012);
+      g.fillEllipse(w / 2, h / 2, w * (1 - i / 13), h * (1 - i / 13));
+    }
+  });
 }
