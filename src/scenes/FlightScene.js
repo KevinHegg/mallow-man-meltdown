@@ -1,18 +1,26 @@
-// Flight: climb the candy canyon toward the boss's cloud. Parallax layers sell depth;
-// all gameplay lives on the 2D screen plane.
+// Flight: into-the-horizon run down a candy valley toward the boss's cloud. A tiny pseudo-3D
+// projector draws the valley and scales entities with depth, but all gameplay — steering,
+// goo, beans, props, collisions — stays on the 2D screen plane exactly as before.
 import * as Phaser from 'phaser';
-import { CAT, DEPTH, MASK, TIER_COLOR, TIER_LABEL, TUNE } from '../config.js';
+import { DEPTH, G_PX, TIER_COLOR, TIER_LABEL, TUNE } from '../config.js';
 import { Glider } from '../objects/Glider.js';
 import { Beans, GooMallows } from '../objects/Projectiles.js';
 import { City } from '../objects/City.js';
 import { Controls } from '../objects/Controls.js';
 import { buildBossRig } from '../objects/MarshmallowMan.js';
 import { Hud } from '../ui/Hud.js';
-import { drawSky, floatText, flushTrash, makeFx, rand, randInt, retire, routeCollisions } from '../ui/helpers.js';
+import { drawSky, floatText, flushTrash, makeFx, rand, randInt, routeCollisions } from '../ui/helpers.js';
+import { Projector } from '../view/Projector.js';
+import { Valley } from '../view/Valley.js';
+import { PropPool, ShadowPool } from '../view/Pools.js';
 import { Sfx } from '../sfx.js';
 
-const SCROLL = 170; // px/s the canyon scrolls past
-const WALL_W = 56;
+const FOCAL = 420;
+const SPAWN_DEPTH = 6 * FOCAL; // props appear this far ahead…
+const APPROACH_TIME = 4.2; // …and take this long to reach the glider's plane
+const HOVER_DEPTH = 1.7 * FOCAL; // pickups drift here for a while before passing
+const WALL_INSET = 40; // valley walls sit this far in from the screen edges at the glider's plane
+const MAX_GOO = 10;
 
 export class FlightScene extends Phaser.Scene {
   constructor() {
@@ -31,27 +39,51 @@ export class FlightScene extends Phaser.Scene {
     this.nextObstacle = 1.4;
     this.nextGoo = 2.2;
     this.nextPickup = 7;
+    this.pt = {};
 
-    // parallax: sky → far clouds → distant boss → mid walls → near walls
-    drawSky(this, [0xffc6e3, 0xffe3f1, 0xd7f0ff, 0xbfe9ff]);
-    this.far = this.add.tileSprite(0, 0, W, H, 'farsky').setOrigin(0).setDepth(DEPTH.far);
-    this.distant = this.add.container(W / 2, 205).setDepth(DEPTH.distant);
+    drawSky(this, [0xffb8dc, 0xffcfe6, 0xffe6f2, 0xfff0f6]);
+    this.city = new City(this, { height: 92, frost: this.run.frost });
+    const horizonY = Math.round(H * 0.3);
+    const bottom = this.city.top - 46;
+    const planeY = bottom - 60; // glider's home row = the flight plane at depth FOCAL
+    this.proj = new Projector({ cx: W / 2, horizonY, focal: FOCAL, planeH: planeY - horizonY });
+    this.valley = new Valley(this, this.proj, {
+      groundY: this.city.top - horizonY,
+      halfWidth: W / 2 - WALL_INSET,
+      bottomY: this.city.top,
+    });
+    this.speed = (SPAWN_DEPTH - FOCAL) / APPROACH_TIME; // world units per second
+
+    // The boss sits on the horizon and grows with progress: he is the progress bar.
+    this.distant = this.add.container(W / 2, horizonY).setDepth(DEPTH.distant);
     const dCloud = this.add.image(0, 40, 'bosscloud').setScale(0.9);
     const dRig = buildBossRig(this, 0, 0, 1);
     dRig.parts.forEach((p) => p.setTint(0xf2dcff));
-    this.distant.add([dCloud, dRig.root]).setScale(0.22).setAlpha(0.85);
+    this.distant.add([dCloud, dRig.root]);
     this.distantRig = dRig;
-    this.midL = this.add.tileSprite(0, 0, 100, H, 'wallL').setOrigin(0).setDepth(DEPTH.mid).setTint(0xf0c8f5).setAlpha(0.6);
-    this.midR = this.add.tileSprite(W - 100, 0, 100, H, 'wallR').setOrigin(0).setDepth(DEPTH.mid).setTint(0xf0c8f5).setAlpha(0.6);
-    this.wallL = this.add.tileSprite(0, 0, WALL_W, H, 'wallL').setOrigin(0).setDepth(DEPTH.walls);
-    this.wallR = this.add.tileSprite(W - WALL_W, 0, WALL_W, H, 'wallR').setOrigin(0).setDepth(DEPTH.walls);
+    this.placeBoss();
 
-    this.city = new City(this, { height: 92, frost: this.run.frost });
     this.fx = makeFx(this);
-    this.bounds = { left: WALL_W + 48, right: W - WALL_W - 48, top: 150, bottom: this.city.top - 46 };
-    this.glider = new Glider(this, W / 2, this.bounds.bottom - 60, this.bounds, this.run, this.fx);
+    this.bounds = {
+      left: WALL_INSET + 50,
+      right: W - WALL_INSET - 50,
+      top: horizonY + (planeY - horizonY) * 0.28,
+      bottom,
+    };
+    this.glider = new Glider(this, W / 2, planeY, this.bounds, this.run, this.fx);
     this.beans = new Beans(this);
     this.goo = new GooMallows(this, { cityTop: this.city.top + 12, onCity: (m) => this.gooLandsOnCity(m) });
+    this.beanViews = new ShadowPool(this, 16, DEPTH.beans);
+    this.gooViews = new ShadowPool(this, MAX_GOO + 2, DEPTH.goo);
+    this.propPool = new PropPool(this, {
+      ledge: { shape: { type: 'rectangle', width: 180, height: 58 }, count: 4 },
+      licorice: { shape: { type: 'rectangle', width: 236, height: 22 }, count: 8 },
+      gumdrop0: { shape: { type: 'circle', radius: 27 }, count: 3 },
+      gumdrop1: { shape: { type: 'circle', radius: 27 }, count: 3 },
+      gumdrop2: { shape: { type: 'circle', radius: 27 }, count: 3 },
+      pk_boost: { shape: { type: 'circle', radius: 28 }, count: 2 },
+      pk_shake: { shape: { type: 'circle', radius: 28 }, count: 2 },
+    });
 
     const boost = () => this.glider.boost();
     const shake = () => this.glider.shake();
@@ -70,29 +102,25 @@ export class FlightScene extends Phaser.Scene {
     routeCollisions(this, { 'glider|prop': hits['glider|prop'] }, 'collisionactive');
 
     this.cameras.main.fadeIn(400, 255, 255, 255);
-    this.hud.banner('FLY!', 'Climb the candy canyon to his cloud', 1300);
+    this.hud.banner('FLY!', 'Down the candy valley to his cloud', 1300);
+  }
+
+  placeBoss() {
+    const s = Phaser.Math.Linear(0.22, 0.55, this.progress);
+    this.distant.setScale(s).setY(this.proj.horizonY - 40 * s); // cloud centre sits on the horizon
   }
 
   update(_time, delta) {
     const dt = Math.min(delta / 1000, 0.05);
+    const W = this.scale.width;
     flushTrash(this);
     const boosting = this.glider.boostT > 0;
-    const speed = SCROLL * (boosting ? 1.8 : 1) * (this.arriving ? 1.6 : 1);
+    const speed = this.speed * (boosting ? 1.8 : 1) * (this.arriving ? 1.6 : 1);
 
-    this.far.tilePositionY -= speed * 0.12 * dt;
-    this.midL.tilePositionY -= speed * 0.45 * dt;
-    this.midR.tilePositionY -= speed * 0.45 * dt;
-    this.wallL.tilePositionY -= speed * dt;
-    this.wallR.tilePositionY -= speed * dt;
-
-    for (const p of this.props) {
-      p.y += speed * dt;
-      if (p.bob !== undefined) p.x = p.baseX + Math.sin(this.elapsed * 2 + p.bob) * 12;
-      if (p.y > this.scale.height + 100) {
-        this.props.delete(p);
-        retire(this, p);
-      }
-    }
+    const sway = (this.glider.x - W / 2) * 0.12;
+    this.proj.camX += (sway - this.proj.camX) * Math.min(1, dt * 4);
+    this.valley.update(dt, speed);
+    this.updateProps(dt, speed);
 
     this.controls.update(dt);
     this.glider.update(dt);
@@ -100,18 +128,41 @@ export class FlightScene extends Phaser.Scene {
     this.goo.update(dt);
     this.city.update(dt);
 
+    const proj = this.proj;
+    this.beanViews.sync(this.beans.items, (y) => {
+      const s = proj.planeScaleAt(y);
+      return s < 0.06 ? 0 : Math.min(s, 1.2);
+    });
+    this.gooViews.sync(this.goo.items, (y) => Phaser.Math.Clamp(proj.planeScaleAt(y), 0.15, 1.25));
+
     if (!this.ended && !this.arriving) {
       this.elapsed += dt;
       this.progress = Math.min(1, this.progress + (dt * (boosting ? 1.6 : 1)) / TUNE.flightTime);
       this.spawn(dt);
+      this.placeBoss();
       if (this.progress >= 1) this.arrive();
       if (this.city.total >= 1) this.lose('frost');
     }
-    const d = 0.22 + this.progress * 0.2;
-    this.distant.setScale(d);
     this.hud.progress = this.progress;
     this.hud.update();
     this.syncRun();
+  }
+
+  // Props live on the flight plane: they emerge at the horizon and sweep toward the camera.
+  updateProps(dt, speed) {
+    const H = this.scale.height;
+    const t = this.pt;
+    for (const p of this.props) {
+      if (p.hover > 0 && p.pz <= HOVER_DEPTH) p.hover -= dt;
+      else p.pz -= speed * dt;
+      const bob = p.bob !== undefined ? Math.sin(this.elapsed * 2 + p.bob) * 14 : 0;
+      this.proj.onPlane(p.xw + bob, p.pz, t);
+      p.setPosition(t.x, t.y);
+      if (Math.abs(p.scaleX - t.s) > 0.01) p.setScale(t.s);
+      p.setAlpha(Phaser.Math.Clamp((SPAWN_DEPTH - p.pz) / (0.5 * FOCAL), 0, 1));
+      p.setDepth(DEPTH.props + (1 - p.pz / SPAWN_DEPTH) * 0.9);
+      if (t.y - 40 * t.s > H || p.pz < 0.3 * FOCAL) this.releaseProp(p);
+    }
   }
 
   spawn(dt) {
@@ -133,66 +184,82 @@ export class FlightScene extends Phaser.Scene {
     }
   }
 
-  addProp(x, y, key, shape, kind = 'obstacle') {
-    const opts = {
-      isStatic: true,
-      isSensor: true,
-      label: 'prop',
-      collisionFilter: { category: CAT.prop, mask: MASK.prop },
-      shape: shape.circle ? { type: 'circle', radius: shape.circle } : { type: 'rectangle', width: shape.w, height: shape.h },
-    };
-    const img = this.matter.add.image(x, y, key, null, opts).setDepth(DEPTH.props);
+  // xw: world x on the flight plane (screen offset from centre when it reaches the glider).
+  addProp(key, xw, pz = SPAWN_DEPTH, kind = 'obstacle') {
+    const img = this.propPool.acquire(key);
+    if (!img) return null; // pool exhausted = on-screen cap reached
     img.kind = kind;
-    img.alive = true;
+    img.xw = xw;
+    img.pz = pz;
+    img.hover = 0;
+    img.bob = undefined;
     this.props.add(img);
     return img;
   }
 
+  releaseProp(p) {
+    this.props.delete(p);
+    this.propPool.release(p);
+  }
+
   spawnObstacle() {
     const W = this.scale.width;
-    const b = this.bounds;
-    const y = -70;
+    const half = W / 2 - WALL_INSET;
     const r = Math.random();
     if (r < 0.35) {
+      // sugar-cube ledge jutting out of a valley wall
       const left = Math.random() < 0.5;
-      const img = this.addProp(left ? 128 : W - 128, y, 'ledge', { w: 180, h: 58 });
-      img.setFlipX(!left);
+      const img = this.addProp('ledge', (left ? -1 : 1) * (half - 90));
+      img?.setFlipX(!left);
     } else if (r < 0.7) {
-      const gapX = randInt(b.left + 50, b.right - 50);
+      // licorice gate: fly through the gap
+      const b = this.bounds;
+      const gapX = randInt(b.left + 50, b.right - 50) - W / 2;
       const gap = 170;
-      this.addProp(gapX - gap / 2 - 118, y, 'licorice', { w: 236, h: 22 });
-      this.addProp(gapX + gap / 2 + 118, y, 'licorice', { w: 236, h: 22 });
+      this.addProp('licorice', gapX - gap / 2 - 118);
+      this.addProp('licorice', gapX + gap / 2 + 118);
     } else {
       const n = randInt(1, 2);
       for (let k = 0; k < n; k++) {
-        const x = randInt(b.left, b.right);
-        const g = this.addProp(x, y - k * 110, `gumdrop${randInt(0, 2)}`, { circle: 27 });
-        g.baseX = x;
-        g.bob = rand(0, 6);
+        const g = this.addProp(`gumdrop${randInt(0, 2)}`, randInt(-half + 60, half - 60), SPAWN_DEPTH + k * 0.5 * FOCAL);
+        if (g) g.bob = rand(0, 6);
       }
     }
   }
 
+  // Pickups drift in to mid-depth and hover there before passing by.
   spawnPickup() {
     const gl = this.glider;
     const needBoost = TUNE.boostMax - gl.boosts;
     const needShake = TUNE.shakeMax - gl.shakes;
     const kind = needShake > needBoost ? 'shake' : needBoost > 0 ? 'boost' : Math.random() < 0.5 ? 'boost' : 'shake';
-    const x = randInt(this.bounds.left, this.bounds.right);
-    const img = this.addProp(x, -60, kind === 'boost' ? 'pk_boost' : 'pk_shake', { circle: 28 }, `pickup_${kind}`);
-    img.baseX = x;
+    const half = this.scale.width / 2 - WALL_INSET - 70;
+    const img = this.addProp(kind === 'boost' ? 'pk_boost' : 'pk_shake', randInt(-half, half), SPAWN_DEPTH, `pickup_${kind}`);
+    if (!img) return;
     img.bob = rand(0, 6);
+    img.hover = 3.5;
   }
 
-  // The distant boss lobs goo down the canyon at you (and the city).
+  // The boss lobs goo from his cloud on the horizon, at you or at the city.
   spawnGoo() {
-    const b = this.bounds;
-    const aimed = Math.random() < 0.45;
-    const x = aimed ? Phaser.Math.Clamp(this.glider.x + rand(-50, 50), b.left, b.right) : randInt(b.left, b.right);
-    this.goo.spawn(x, -30, rand(-30, 30), rand(40, 90));
-    const arm = Math.random() < 0.5 ? this.distantRig.armL : this.distantRig.armR;
-    const sgn = arm === this.distantRig.armL ? 1 : -1;
-    this.tweens.add({ targets: arm, rotation: sgn * 2.6, duration: 200, yoyo: true, ease: 'Sine.easeOut' });
+    if (this.goo.items.size >= MAX_GOO) return;
+    const s = this.distant.scale;
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const x0 = this.distant.x + side * 100 * s;
+    const y0 = this.distant.y - 250 * s;
+    const T = rand(1.6, 2.2);
+    let tx;
+    let ty;
+    if (Math.random() < 0.45) {
+      tx = this.glider.x + this.glider.vx * T * 0.4;
+      ty = this.glider.y;
+    } else {
+      tx = Phaser.Utils.Array.GetRandom(this.city.centers()).x;
+      ty = this.city.top + 20;
+    }
+    this.goo.spawn(x0, y0, (tx - x0) / T, (ty - y0) / T - 0.5 * G_PX * T);
+    const arm = side < 0 ? this.distantRig.armL : this.distantRig.armR;
+    this.tweens.add({ targets: arm, rotation: -side * 2.6, duration: 200, yoyo: true, ease: 'Sine.easeOut' });
   }
 
   fire() {
@@ -229,11 +296,10 @@ export class FlightScene extends Phaser.Scene {
     if (prop.kind.startsWith('pickup_')) {
       const kind = prop.kind.slice(7);
       this.glider.addCharge(kind);
-      this.props.delete(prop);
-      retire(this, prop);
       this.fx.spark.explode(10, prop.x, prop.y);
       Sfx.pickup();
       floatText(this, prop.x, prop.y - 30, kind === 'boost' ? '+1 BOOST' : '+1 SHAKE', '#ff5e8a');
+      this.releaseProp(prop);
       return;
     }
     if (this.glider.bonk(prop.x)) this.fx.spark.explode(6, this.glider.x, this.glider.y - 20);
@@ -266,8 +332,8 @@ export class FlightScene extends Phaser.Scene {
     this.hud.banner('THE CLOUD!', 'Meltdown time', 1400);
     this.goo.popAll(this.fx);
     this.glider.cleanAll();
-    this.glider.autopilot = { x: W / 2, y: this.bounds.top + 80 };
-    this.tweens.add({ targets: this.distant, scale: 0.9, y: 360, alpha: 1, duration: 1500, ease: 'Quad.easeIn' });
+    this.glider.autopilot = { x: W / 2, y: this.bounds.top + 40 };
+    this.tweens.add({ targets: this.distant, scale: 1, y: this.proj.horizonY + 60, alpha: 1, duration: 1500, ease: 'Quad.easeIn' });
     this.time.delayedCall(1500, () => {
       this.syncRun();
       this.cameras.main.fadeOut(500, 255, 255, 255);

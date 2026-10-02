@@ -366,6 +366,99 @@ export function buildTextures(scene) {
     g.fillEllipse(220, 136, 300, 26);
   });
 
+  // ---------- Valley (into-the-horizon flight) ----------
+  // Building billboards are drawn for the LEFT wall (inner face = right edge) and flipped for the right.
+  [0, 1].forEach((v) =>
+    make(`v_tower${v}`, 120, 300, (g, w, h) => {
+      const s = 36;
+      const cols = 3;
+      const rows = 7;
+      const x0 = (w - cols * s) / 2;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const accent = v === 0 ? (r * 3 + c) % 7 === 2 : r === 3;
+          const fill = accent ? (v === 0 ? 0xffd3e6 : 0xd9f3ff) : (r + c) % 2 ? PAL.sugar : 0xfaf0fa;
+          blob(g, [{ rr: [x0 + c * s + 1, h - (r + 1) * s + 1, s - 2, s - 2, 6] }], fill, PAL.sugarLine, 2);
+          g.fillStyle(0xffffff, 1);
+          g.fillRect(x0 + c * s + 6, h - (r + 1) * s + 6, 9, 3);
+        }
+      }
+      const topY = h - rows * s;
+      g.fillStyle(PAL.ink, 0.1);
+      g.fillRect(x0 + cols * s - 12, topY, 12, rows * s);
+      if (v === 0) {
+        blob(g, [{ e: [w / 2, topY - 2, 52, 40] }], PAL.candy[1], darker(PAL.candy[1]), 2);
+        g.fillStyle(0xffffff, 0.8);
+        g.fillCircle(w / 2 - 8, topY - 10, 2);
+        g.fillCircle(w / 2 + 9, topY - 6, 1.6);
+      } else {
+        g.fillStyle(0x3f8f3a, 1);
+        g.fillRect(w / 2 + 1, topY - 36, 3, 16);
+        blob(g, [{ c: [w / 2, topY - 14, 14] }], 0xe8213d, darker(0xe8213d), 2);
+        g.fillStyle(0xffffff, 0.7);
+        g.fillCircle(w / 2 - 5, topY - 19, 3);
+      }
+    }),
+  );
+
+  [PAL.candy[0], PAL.candy[3], PAL.candy[2]].forEach((color, i) =>
+    make(`v_gumhouse${i}`, 130, 230, (g, w, h) => {
+      blob(g, [{ e: [w / 2, 78, 116, 96] }], color, darker(color), 3);
+      g.fillStyle(lighter(color, 0.55), 0.7);
+      g.fillEllipse(44, 52, 26, 14);
+      g.fillStyle(0xffffff, 0.85);
+      for (let k = 0; k < 12; k++) g.fillCircle(rng.between(24, 106), rng.between(40, 76), rng.realInRange(1, 2));
+      blob(g, [{ rr: [10, 80, 110, 148, 8] }], lighter(color, 0.6), darker(color, 0.15), 3);
+      g.fillStyle(0xfff1a8, 1);
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) g.fillRoundedRect(22 + c * 32, 96 + r * 30, 18, 18, 4);
+      g.fillStyle(darker(color, 0.35), 1);
+      g.fillRoundedRect(w / 2 - 12, h - 32, 24, 30, { tl: 12, tr: 12, bl: 0, br: 0 });
+      g.fillStyle(PAL.ink, 0.1);
+      g.fillRect(104, 82, 14, 144);
+    }),
+  );
+
+  make('v_cane', 90, 330, (g, w, h) => {
+    const cw = 40;
+    const x0 = (w - cw) / 2;
+    const top = 90;
+    g.fillStyle(0xffffff, 1);
+    g.fillRect(x0, top, cw, h - top);
+    g.fillStyle(0xe8213d, 1);
+    for (let y = top; y < h; y += 28) g.fillPoints(pts([x0, y + 14, x0 + cw, y, x0 + cw, y + 12, x0, y + 26]), true);
+    g.fillStyle(PAL.ink, 0.12);
+    g.fillRect(x0 + cw - 8, top, 8, h - top);
+    g.lineStyle(2, PAL.licoriceDark, 0.6);
+    g.strokeRect(x0, top, cw, h - top);
+    g.fillStyle(0xffffff, 1);
+    g.fillRect(w / 2 - 3, top - 30, 6, 30);
+    blob(g, [{ c: [w / 2, top - 44, 38] }], PAL.candy[4], darker(PAL.candy[4]), 3);
+    g.lineStyle(5, 0xffffff, 0.9);
+    g.beginPath();
+    g.arc(w / 2, top - 44, 22, 0, Math.PI * 1.6);
+    g.strokePath();
+    g.beginPath();
+    g.arc(w / 2, top - 44, 10, Math.PI, Math.PI * 2.5);
+    g.strokePath();
+  });
+
+  make('mountains', 680, 180, (g, w, h) => {
+    const range = (peaks, color) => {
+      for (const [x, ph, hw] of peaks) {
+        g.fillStyle(color, 1);
+        g.fillTriangle(x - hw, h, x + hw, h, x, h - ph);
+        // icing cap with little drips
+        const capY = h - ph + ph * 0.3;
+        const cw = hw * 0.3;
+        g.fillStyle(0xffffff, 1);
+        g.fillTriangle(x - cw, capY, x + cw, capY, x, h - ph);
+        for (let k = -1; k <= 1; k++) g.fillCircle(x + k * cw * 0.6, capY, cw * 0.28);
+      }
+    };
+    range([[60, 120, 110], [200, 150, 130], [340, 128, 120], [480, 160, 140], [620, 125, 115]], 0xe6c9f5);
+    range([[0, 80, 100], [130, 100, 110], [270, 86, 95], [410, 106, 120], [560, 90, 105], [680, 80, 100]], 0xffbfdc);
+  });
+
   // ---------- Evil Marshmallow Man parts ----------
   make('boss_body', 180, 164, (g) => {
     blob(g, [{ rr: [6, 6, 168, 148, 44] }], PAL.mallow, PAL.mallowLine, 3);

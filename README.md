@@ -46,7 +46,7 @@ In dev builds the game instance is available as `window.__game`.
 
 ## How it plays
 
-- **Flight** (~40 s): climb the canyon. Dodge sugar-cube ledges, licorice gates and gumdrops (bonks knock you back). Grab soda bubbles (+1 Boost) and sugar shakers (+1 Shake). The distant boss lobs goo-mallows down at you.
+- **Flight** (~40 s): fly into the horizon down a candy valley, with sugar-cube towers and gumdrop houses streaming past on both sides. The boss sits on his cloud at the horizon and grows as you get closer (he is the progress meter). Dodge sugar-cube ledges, licorice gates and gumdrops as they come at you out of the distance (bonks knock you back). Grab soda bubbles (+1 Boost) and sugar shakers (+1 Shake) while they hover at mid-depth. The boss lobs goo-mallows at you and at the city.
 - **Boss**: he patrols his cloud and throws goo-mallows at you or at the city. Jelly beans have short range, so you have to dive in, fire, and dive back out. He melts through 4 stages: pristine → sagging → arm sloughs off → collapse. Then he melts away and a fluff flood fills the screen.
 - **Goo tiers** (dusted / splattered / caked): each splat adds mass, so the glider responds more slowly. The weight also drags you down, and off-centre goo lists you sideways, which also skews your aim.
 - **Cleansing:** goo drips off over time (slower when caked). **Bubble Boost** sheds about half and gives you altitude plus a brief bubble shield. **Shake** fully cleans you, but you wobble helplessly for 0.9 s and goo sticks harder.
@@ -68,13 +68,17 @@ src/
     Projectiles.js     jelly beans + goo-mallows (Matter sensors)
     City.js            skyline + frost meter
     MarshmallowMan.js  boss rig, throw AI (ballistic aim), 4-stage melt
+  view/
+    Projector.js       tiny pseudo-3D projector (no 3D engine)
+    Valley.js          valley walls, ground, horizon mountains/clouds (pooled billboards)
+    Pools.js           pooled depth-scaled sprites + reusable Matter props
   ui/
     Hud.js             bars, goo/frost chips, Boost/Shake buttons, banners
     helpers.js         text/sky/button helpers, particles, collision router, run state
   scenes/              Boot (textures + title), Flight, Boss, End
 ```
 
-Gameplay is strictly 2D on the screen plane. Depth is only decorative, from parallax tile layers and the distant boss. Most balance lives in `TUNE` in `src/config.js`.
+Gameplay is strictly 2D on the screen plane. Depth is only decorative: in Flight, a tiny projector (`screen = horizon + (x, y) / z * focal`) draws the valley and scales goo, beans and props by depth, while collisions stay in screen space. Most balance lives in `TUNE` in `src/config.js`.
 
 ## Deploy (Netlify free tier)
 

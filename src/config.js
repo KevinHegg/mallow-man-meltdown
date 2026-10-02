@@ -56,6 +56,8 @@ export const MASK = {
 export const DEPTH = {
   sky: 0,
   far: 1,
+  horizon: 1.2,
+  ground: 1.5,
   distant: 2,
   mid: 3,
   boss: 6,
