@@ -7,10 +7,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Notify via ntfy
+        # The commit message and topic arrive as env vars, never pasted into the script,
+        # so quotes or $(...) in a commit message can't break or hijack the step.
+        env:
+          MSG: ${{ github.event.head_commit.message }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: |
-          MSG="${{ github.event.head_commit.message }}"
+          if [ -z "$NTFY_TOPIC" ]; then
+            echo "NTFY_TOPIC secret is not set; skipping."
+            exit 0
+          fi
+          FIRST_LINE=$(printf '%s\n' "$MSG" | head -n 1)
           curl -s -o /dev/null \
             -H "Title: Mallow Man Meltdown" \
             -H "Tags: video_game" \
-            -d "Push to main: $MSG" \
-            https://ntfy.sh/mmm-push-3b919a7268
+            -d "Push to main: $FIRST_LINE" \
+            "https://ntfy.sh/$NTFY_TOPIC"
