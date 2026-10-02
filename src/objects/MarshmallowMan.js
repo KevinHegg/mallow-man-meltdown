@@ -27,6 +27,7 @@ const MELT_DRIPS = [0.4, 2.5, 4, 8];
 const MELT_SLOUGH = [0, 0.6, 1.2, 2.2];
 const PUDDLE = [0, 0.35, 0.65, 1];
 const SWAT_RANGE = 300; // px from his chest at which the one-armed boss swats
+const SWAT_UNDER = 150; // vs a target on the ground: how far either side of him he swats down
 const SWAT_COOLDOWN = 1.8;
 const SPLASH = { n: 3, spread: 120 };
 
@@ -60,7 +61,8 @@ export function buildBossRig(scene, x, y, scale) {
 }
 
 export class MarshmallowMan extends Phaser.Events.EventEmitter {
-  constructor(scene, { x, y, scale, fx }) {
+  // ground: his target stands on a rooftop below him (the swat reaches down instead of out).
+  constructor(scene, { x, y, scale, fx, ground = false }) {
     super();
     this.scene = scene;
     this.fx = fx;
@@ -68,8 +70,10 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
     this.homeY = y;
     this.x = x;
     this.scale = scale;
-    this.cloud = scene.add.image(x, y + 52, 'bosscloud').setDepth(DEPTH.bossCloud);
-    this.puddle = scene.add.image(x, y - 6, 'boss_puddle').setDepth(DEPTH.puddle).setScale(0.2, 0.2).setAlpha(0);
+    this.k = scale / 0.85; // size relative to the original arena boss (cloud, puddle, sway)
+    this.ground = ground;
+    this.cloud = scene.add.image(x, y + 52 * this.k, 'bosscloud').setDepth(DEPTH.bossCloud).setScale(this.k);
+    this.puddle = scene.add.image(x, y - 6 * this.k, 'boss_puddle').setDepth(DEPTH.puddle).setScale(0.2, 0.2).setAlpha(0);
     this.rig = buildBossRig(scene, x, y, scale);
     this.rig.root.setDepth(DEPTH.boss);
     this.maxHp = TUNE.bossHP;
@@ -124,16 +128,16 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
     const p = this.pose;
     if (!this.dead) {
       const speed = [0.45, 0.55, 0.62, 0.38][this.stage];
-      this.x = this.homeX + Math.sin(this.t * speed) * 95;
+      this.x = this.homeX + Math.sin(this.t * speed) * 95 * this.k;
     }
     const bob = Math.sin(this.t * 1.7) * 3;
     this.recoil = Math.max(0, this.recoil - dt * 1.5);
     // ARM OFF!: angry and scared — he trembles
     const tremble = (this.stage === 2 && !this.dead ? Math.sin(this.t * 31) * 2.2 : 0) + Math.sin(this.t * 40) * this.recoil * 8;
     r.root.setPosition(this.x + tremble, this.homeY + bob + p.sink);
-    this.cloud.setPosition(this.x, this.homeY + 52 + Math.sin(this.t * 1.7 + 0.6) * 4);
-    this.puddle.setPosition(this.x, this.homeY - 6 + bob);
-    this.puddle.setScale(0.2 + p.puddle * 0.8, 0.2 + p.puddle * 0.8).setAlpha(Math.min(1, p.puddle * 1.5));
+    this.cloud.setPosition(this.x, this.homeY + (52 + Math.sin(this.t * 1.7 + 0.6) * 4) * this.k);
+    this.puddle.setPosition(this.x, this.homeY + (bob - 6) * this.k);
+    this.puddle.setScale((0.2 + p.puddle * 0.8) * this.k).setAlpha(Math.min(1, p.puddle * 1.5));
 
     const breath = 1 + Math.sin(this.t * 3.2) * 0.02;
     r.body.setScale(p.bodySX, p.bodySY * breath);
@@ -176,7 +180,9 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
     if (this.active && !this.dead) {
       this.throwT -= dt;
       this.swatCd -= dt;
-      const near = Phaser.Math.Distance.Between(glider.x, glider.y, this.x, this.homeY - 140 * this.scale) < SWAT_RANGE;
+      const near = this.ground
+        ? Math.abs(glider.x - this.x) < SWAT_UNDER * this.k
+        : Phaser.Math.Distance.Between(glider.x, glider.y, this.x, this.homeY - 140 * this.scale) < SWAT_RANGE;
       if (this.stage === 2 && !this.throwing && this.swatCd <= 0 && near && !glider.busy) this.swat(glider);
       else if (this.throwT <= 0 && !this.throwing) this.startThrow(glider);
     }
@@ -285,7 +291,7 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
         this.lob(hand, glider.x + glider.vx * T * 0.5, glider.y + glider.vy * T * 0.3, T);
       } else {
         const c = this.cityTarget();
-        this.lob(hand, c.x, c.y, R(1.4, 1.8));
+        this.lob(hand, c.x, c.y, R(1.4, 1.8), { city: true });
       }
     } else if (this.stage === 1) {
       // sloppy: a lobbed goo bomb that bursts mid-flight over you or the city
@@ -294,7 +300,7 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
       const T = overGlider ? R(1.3, 1.6) : R(1.5, 1.8);
       const tx = overGlider ? glider.x + glider.vx * T * 0.4 : c.x;
       const ty = overGlider ? glider.y - 90 : c.y;
-      this.lob(hand, tx, ty, T, { burst: { after: T * (overGlider ? 0.6 : 0.55), n: SPLASH.n, spread: SPLASH.spread } });
+      this.lob(hand, tx, ty, T, { city: !overGlider, burst: { after: T * (overGlider ? 0.6 : 0.55), n: SPLASH.n, spread: SPLASH.spread } });
     } else if (this.stage === 2) {
       // desperate: fast, wild throws (often two)
       const n = Math.random() < 0.4 ? 2 : 1;
@@ -304,7 +310,7 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
           this.lob(hand, glider.x + R(-70, 70), glider.y + R(-40, 40), T);
         } else {
           const c = this.cityTarget();
-          this.lob(hand, c.x + R(-40, 40), c.y, R(1.1, 1.5));
+          this.lob(hand, c.x + R(-40, 40), c.y, R(1.1, 1.5), { city: true });
         }
       }
     } else {
@@ -312,7 +318,7 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
       if (canAim && Math.random() < 0.5) this.lob(hand, glider.x + R(-30, 30), glider.y + 60, R(1.8, 2.3));
       else {
         const c = this.cityTarget();
-        this.lob(hand, c.x, c.y, R(2, 2.4));
+        this.lob(hand, c.x, c.y, R(2, 2.4), { city: true });
       }
     }
   }
@@ -362,9 +368,11 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
   swatSpray(glider) {
     const hand = this.handWorld('R');
     const base = Math.atan2(glider.y - hand.y, glider.x - hand.x);
+    // close range only: the spray lives just long enough to reach you (a rooftop is further down)
+    const life = this.ground ? Math.min(1.1, Phaser.Math.Distance.Between(hand.x, hand.y, glider.x, glider.y) / 520 + 0.2) : 0.6;
     for (let k = 0; k < 4; k++) {
       const a = base + (k - 1.5) * 0.3;
-      this.emit('throw', hand.x, hand.y, Math.cos(a) * 520, Math.sin(a) * 520, { life: 0.6 });
+      this.emit('throw', hand.x, hand.y, Math.cos(a) * 520, Math.sin(a) * 520, { life });
     }
     this.scene.cameras.main.shake(120, 0.005);
   }

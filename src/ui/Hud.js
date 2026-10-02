@@ -1,46 +1,31 @@
 import * as Phaser from 'phaser';
 import { DEPTH, PAL, TIER_COLOR, TIER_LABEL, TUNE } from '../config.js';
-import { STAGE_NAMES } from '../objects/MarshmallowMan.js';
 import { makeMuteButton, txt } from './helpers.js';
 import { Sfx } from '../sfx.js';
 
 const D = DEPTH.hud;
 
+// No HUD bars (DESIGN.md: "the world is the interface"): progress is the boss growing on the
+// horizon, his health is his melting body. What's left: the goo and frost chips, the cleanse
+// buttons, banners and warnings.
 export class Hud {
-  // mode: 'flight' (progress bar) | 'boss' (melt-o-meter)
-  constructor(scene, { mode, glider, city, boss, onBoost, onShake }) {
+  // mode: 'flight' (glider: BOOST + SHAKE) | 'roof' (pilot on foot: SHAKE only)
+  constructor(scene, { mode, glider, city, onBoost, onShake }) {
     this.scene = scene;
     this.mode = mode;
     this.glider = glider;
     this.city = city;
-    this.boss = boss;
-    this.progress = 0;
     const { width: W, height: H } = scene.scale;
     this.W = W;
 
-    const panel = scene.add.graphics().setDepth(D);
-    panel.fillStyle(0xffffff, 0.85);
-    panel.fillRoundedRect(12, 12, W - 24, 58, 18);
-    panel.lineStyle(3, PAL.ink, 0.9);
-    panel.strokeRoundedRect(12, 12, W - 24, 58, 18);
-    this.title = txt(scene, 30, 29, mode === 'boss' ? 'MELT-O-METER' : 'TO THE CLOUD', 15, PAL.inkHex, {
-      strokeThickness: 0,
-    })
-      .setOrigin(0, 0.5)
-      .setDepth(D + 1);
-    this.status = txt(scene, W - 74, 29, '', 15, PAL.inkHex, { strokeThickness: 0 }).setOrigin(1, 0.5).setDepth(D + 1);
-    this.barX = 30;
-    this.barW = W - 112;
-    this.bar = scene.add.graphics().setDepth(D + 1);
-    this.barIcon = scene.add.image(0, 52, 'glider').setScale(0.3).setDepth(D + 2).setVisible(mode === 'flight');
-    makeMuteButton(scene, W - 40, 41);
+    makeMuteButton(scene, W - 34, 32);
+    this.gooChip = this.chip(14, 18, 'left');
+    this.frostChip = this.chip(W - 62, 18, 'right');
 
-    this.gooChip = this.chip(16, 82, 'left');
-    this.frostChip = this.chip(W - 16, 82, 'right');
-
-    const btnY = city.top - 64;
-    this.boostBtn = this.actionButton(62, btnY, 'pk_boost', 'BOOST', onBoost);
+    const btnY = mode === 'roof' ? H - 74 : city.top - 64;
+    this.boostBtn = mode === 'roof' ? null : this.actionButton(62, btnY, 'pk_boost', 'BOOST', onBoost);
     this.shakeBtn = this.actionButton(W - 62, btnY, 'pk_shake', 'SHAKE', onShake);
+    this.buttons = this.boostBtn ? [this.boostBtn, this.shakeBtn] : [this.shakeBtn];
 
     this.bannerTitle = txt(scene, W / 2, H * 0.4, '', 46, '#ff5e8a', { stroke: PAL.inkHex, strokeThickness: 10 })
       .setDepth(D + 5)
@@ -51,11 +36,10 @@ export class Hud {
       .setVisible(false);
     this.warnSub = txt(scene, W / 2, city.top - 114, 'No cleanses left — drip it off!', 16, '#d8364f').setDepth(D + 4).setVisible(false);
     this.lastWarnBeep = 0;
-    this.cache = {};
     this.vignette = this.makeVignette(W, H);
     this.lastNow = scene.time.now;
     this.shown = 1;
-    this.chrome = [panel, this.title, this.status, this.bar, this.barIcon, this.gooChip.g, this.gooChip.t, this.frostChip.g, this.frostChip.t];
+    this.chrome = [this.gooChip.g, this.gooChip.t, this.frostChip.g, this.frostChip.t];
     this.update();
   }
 
@@ -65,7 +49,7 @@ export class Hud {
     if (v === this.shown) return;
     this.shown = v;
     for (const o of this.chrome) o.setAlpha(v);
-    for (const btn of [this.boostBtn, this.shakeBtn]) {
+    for (const btn of this.buttons) {
       btn.pips.setAlpha(v);
       btn.alpha = null;
       btn.zone.input.enabled = v > 0.5;
@@ -174,29 +158,6 @@ export class Hud {
     }
   }
 
-  drawBar(frac, color, ticks) {
-    const key = `${Math.round(frac * 200)}|${color}`;
-    if (this.cache.bar === key) return;
-    this.cache.bar = key;
-    const g = this.bar;
-    const { barX: x, barW: w } = this;
-    const y = 45;
-    const h = 14;
-    g.clear();
-    g.fillStyle(0xf3e0ec, 1);
-    g.fillRoundedRect(x, y, w, h, 7);
-    if (frac > 0.01) {
-      g.fillStyle(color, 1);
-      g.fillRoundedRect(x, y, Math.max(14, w * frac), h, 7);
-    }
-    if (ticks) {
-      g.fillStyle(PAL.ink, 0.6);
-      for (const t of ticks) g.fillRect(x + w * t - 1, y, 2, h);
-    }
-    g.lineStyle(2, PAL.ink, 0.8);
-    g.strokeRoundedRect(x, y, w, h, 7);
-  }
-
   banner(title, sub = '', hold = 1500) {
     const { bannerTitle: t, bannerSub: s, scene } = this;
     scene.tweens.killTweensOf([t, s]);
@@ -208,21 +169,12 @@ export class Hud {
 
   update() {
     const gl = this.glider;
-    if (this.mode === 'boss') {
-      const boss = this.boss;
-      this.drawBar(1 - boss.hpFrac, 0xff5e8a, [0.25, 0.5, 0.75]);
-      this.setText(this.status, STAGE_NAMES[boss.stage]);
-    } else {
-      this.drawBar(this.progress, 0x7ad9a6);
-      this.barIcon.setPosition(this.barX + this.barW * this.progress, 52).setRotation(Math.PI / 2);
-      this.setText(this.status, `${Math.floor(this.progress * 100)}%`);
-    }
     this.setChip(this.gooChip, `GOO: ${TIER_LABEL[gl.tier]}`, TIER_COLOR[gl.tier]);
     const frost = Math.round(this.city.total * 100);
     this.setChip(this.frostChip, `CITY FROST ${frost}%`, frost >= 66 ? '#d8364f' : frost >= 33 ? '#3a95c9' : '#7fb8d6');
 
     const ready = gl.canAct;
-    this.refreshButton(this.boostBtn, gl.boosts, TUNE.boostMax, ready, this.covers(this.boostBtn, gl));
+    if (this.boostBtn) this.refreshButton(this.boostBtn, gl.boosts, TUNE.boostMax, ready, this.covers(this.boostBtn, gl));
     this.refreshButton(this.shakeBtn, gl.shakes, TUNE.shakeMax, ready, this.covers(this.shakeBtn, gl));
 
     const now = this.scene.time.now;
@@ -243,9 +195,5 @@ export class Hud {
         Sfx.warn();
       }
     }
-  }
-
-  setText(t, s) {
-    if (t.text !== s) t.setText(s);
   }
 }

@@ -1098,4 +1098,145 @@ export function buildTextures(scene) {
       for (const [x, y] of v) g.fillCircle(x, y, lw / 2);
     }
   });
+
+  // ---------- The finale: gingerbread pilot, candy parachute, rooftop props ----------
+  const COOKIE = 0xc8834a;
+  const COOKIE_DARK = 0x8f5428;
+  const COOKIE_LIGHT = 0xe2a56a;
+  const zigzag = (g, x0, x1, y, amp, step) => {
+    g.lineStyle(2.4, 0xffffff, 1);
+    g.beginPath();
+    g.moveTo(x0, y);
+    for (let x = x0, k = 0; x <= x1; x += step, k++) g.lineTo(x, y + (k % 2 ? amp : -amp));
+    g.strokePath();
+  };
+  // Pilot torso + head (feet-up layout: the container's origin is between the feet).
+  make('gb_body', 64, 70, (g) => {
+    blob(g, [{ rr: [17, 34, 30, 34, 12] }, { c: [32, 24, 19] }, { c: [18, 40, 7] }, { c: [46, 40, 7] }], COOKIE, COOKIE_DARK, 2.5);
+    g.fillStyle(COOKIE_LIGHT, 1);
+    g.fillCircle(27, 19, 10);
+    g.fillRoundedRect(20, 37, 12, 22, 6);
+    // aviator cap with ear flaps, goggles pushed up on the forehead
+    g.fillStyle(darker(0xff6f9f, 0.25), 1);
+    g.fillEllipse(32, 13, 42, 26);
+    g.fillRoundedRect(12, 14, 9, 18, 4);
+    g.fillRoundedRect(43, 14, 9, 18, 4);
+    g.fillStyle(0xff6f9f, 1);
+    g.fillEllipse(31, 11, 38, 20);
+    g.fillStyle(0xffffff, 0.55);
+    g.fillEllipse(25, 6, 14, 5);
+    g.fillStyle(PAL.ink, 1);
+    g.fillRect(13, 15, 38, 5);
+    for (const x of [24, 40]) {
+      g.fillStyle(PAL.ink, 1);
+      g.fillCircle(x, 17, 6.5);
+      g.fillStyle(0x9be7ff, 1);
+      g.fillCircle(x, 17, 4.6);
+      g.fillStyle(0xffffff, 0.9);
+      g.fillCircle(x - 1.5, 15.5, 1.6);
+    }
+    // face: eyes, icing smile, rosy cheeks
+    g.fillStyle(PAL.ink, 1);
+    g.fillCircle(26, 27, 2.4);
+    g.fillCircle(38, 27, 2.4);
+    g.fillStyle(0xff9ab8, 0.7);
+    g.fillCircle(21, 32, 3);
+    g.fillCircle(43, 32, 3);
+    g.lineStyle(2.4, 0xffffff, 1);
+    g.beginPath();
+    g.arc(32, 30, 6, 0.35, Math.PI - 0.35);
+    g.strokePath();
+    // candy buttons and icing trim
+    for (const [y, c] of [[45, 0xe8213d], [55, 0x5bd16b]]) {
+      blob(g, [{ c: [32, y, 3.6] }], c, darker(c), 1.2);
+      g.fillStyle(0xffffff, 0.8);
+      g.fillCircle(31, y - 1, 1.1);
+    }
+    zigzag(g, 20, 44, 64, 2, 4);
+  });
+  make('gb_leg', 18, 30, (g) => {
+    blob(g, [{ rr: [3, 0, 12, 28, 6] }], COOKIE, COOKIE_DARK, 2);
+    g.fillStyle(COOKIE_LIGHT, 1);
+    g.fillRoundedRect(5, 2, 4, 18, 2);
+    zigzag(g, 4, 14, 21, 1.6, 3.3);
+  });
+  // Jelly-bean blaster held in two cookie hands: striped barrel, gumball hopper, muzzle at the top.
+  make('gb_gun', 36, 66, (g) => {
+    caneTube(g, [quadPath(18, 6, 18, 18, 18, 34, 20)], 6);
+    g.fillStyle(PAL.ink, 1);
+    g.fillRoundedRect(10, 0, 16, 8, 3);
+    g.fillStyle(0xffc94d, 1);
+    g.fillRoundedRect(12, 1, 12, 5, 2);
+    blob(g, [{ c: [18, 42, 11] }], 0xe9f8ff, PAL.ink, 2);
+    for (let k = 0; k < 6; k++) {
+      g.fillStyle(PAL.beans[k], 1);
+      g.fillEllipse(13 + (k % 3) * 5, 39 + Math.floor(k / 3) * 6, 5, 3.4);
+    }
+    g.fillStyle(0xffffff, 0.85);
+    g.fillEllipse(13, 37, 5, 3);
+    blob(g, [{ c: [9, 55, 6.5] }, { c: [27, 55, 6.5] }, { rr: [12, 50, 12, 12, 4] }], COOKIE, COOKIE_DARK, 2);
+    g.fillStyle(PAL.ink, 1);
+    g.fillRect(15, 50, 6, 13);
+  });
+  // Candy parachute: a peppermint-swirl canopy with a scalloped hem and four strings.
+  make('chute', 150, 112, (g, w, h) => {
+    const cx = w / 2;
+    const cy = 58;
+    const rx = 70;
+    const ry = 52;
+    g.lineStyle(1.6, PAL.ink, 0.8);
+    for (const sx of [-0.92, -0.4, 0.4, 0.92]) g.lineBetween(cx + sx * rx, cy + 4, cx, h - 2);
+    const n = 8;
+    // the dome is the upper half of an ellipse: wedges from π to 2π
+    const arcPts = (a0, a1, grow = 0) => {
+      const out = [{ x: cx, y: cy + grow }];
+      for (let i = 0; i <= 8; i++) {
+        const a = a0 + ((a1 - a0) * i) / 8;
+        out.push({ x: cx + Math.cos(a) * (rx + grow), y: cy + Math.sin(a) * (ry + grow) });
+      }
+      return out;
+    };
+    g.fillStyle(PAL.ink, 1);
+    g.fillPoints(arcPts(Math.PI, Math.PI * 2, 3), true);
+    for (let i = 0; i < n; i++) {
+      const a0 = Math.PI + (i / n) * Math.PI;
+      g.fillStyle(i % 2 ? 0xfbf3f6 : 0xe8213d, 1);
+      g.fillPoints(arcPts(a0, a0 + Math.PI / n), true);
+    }
+    // scalloped hem
+    for (let i = 0; i < n; i++) {
+      const x = cx - rx + ((i + 0.5) * 2 * rx) / n;
+      blob(g, [{ c: [x, cy + 1, rx / n + 1] }], i % 2 ? 0xfbf3f6 : 0xe8213d, PAL.ink, 2);
+    }
+    g.fillStyle(0xffffff, 0.5);
+    g.fillEllipse(cx - 24, cy - 34, 30, 10);
+    blob(g, [{ c: [cx, cy - ry + 2, 7] }], 0x7ad9a6, darker(0x7ad9a6), 2);
+  });
+  // Rooftop cover: a gingerbread brick chimney with an icing cap (origin at its base).
+  make('chimney', 88, 134, (g, w, h) => {
+    blob(g, [{ rr: [10, 22, w - 20, h - 22, 6] }, { rr: [2, 8, w - 4, 26, 8] }], COOKIE, COOKIE_DARK, 3);
+    g.fillStyle(COOKIE_LIGHT, 1);
+    g.fillRect(14, 36, (w - 28) * 0.45, h - 40);
+    g.fillStyle(COOKIE_DARK, 0.35);
+    g.fillRect(w - 26, 36, 12, h - 40);
+    g.lineStyle(2.2, 0xffffff, 0.95);
+    for (let y = 48, r = 0; y < h - 4; y += 16, r++) {
+      g.lineBetween(12, y, w - 12, y);
+      for (let x = 12 + (r % 2) * 16; x < w - 14; x += 32) g.lineBetween(x + 16, y - 16, x + 16, y);
+    }
+    frost(g, beads(6, 12, w - 6, 12, 7, 9));
+    frostDrip(g, 22, 18, 16, 8);
+    frostDrip(g, w - 30, 18, 10, 7);
+    blob(g, [{ c: [w / 2 + 14, 4, 6] }], 0xe8213d, darker(0xe8213d), 1.5);
+    g.fillStyle(0xffffff, 0.85);
+    g.fillCircle(w / 2 + 12, 2, 1.8);
+  });
+  make('roofvent', 52, 72, (g, w, h) => {
+    caneTube(g, [quadPath(w / 2, h - 2, w / 2, h / 2, w / 2, 24, 30)], 10);
+    blob(g, [{ e: [w / 2, 18, 46, 22] }], 0xfbf3f6, PAL.ink, 2.5);
+    g.fillStyle(0xe8213d, 1);
+    g.fillEllipse(w / 2, 16, 34, 10);
+    g.fillStyle(0xffffff, 0.8);
+    g.fillEllipse(w / 2 - 8, 13, 10, 3);
+  });
 }

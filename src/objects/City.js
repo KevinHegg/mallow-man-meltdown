@@ -7,15 +7,17 @@ import { beads, contactShadow, frost, frostDrip, mix } from '../art/textures.js'
 const KINDS = ['cube', 'gumdrop', 'cake', 'cane', 'lolli', 'cube', 'gumdrop'];
 
 export class City {
-  constructor(scene, { height, frost }) {
+  // bottom: where the strip ends (the screen bottom by default; the rooftop fight raises it so the
+  // skyline sits behind the roof).
+  constructor(scene, { height, frost, bottom }) {
     this.scene = scene;
     const { width: W, height: H } = scene.scale;
     this.W = W;
-    this.H = H;
+    this.H = bottom ?? H;
     this.height = height;
-    this.top = H - height;
+    this.top = this.H - height;
     this.groundH = Math.round(height * 0.16);
-    this.groundY = H - this.groundH;
+    this.groundY = this.H - this.groundH;
     this.frost = frost.slice();
     this.dirty = false;
     this.redrawT = 0;

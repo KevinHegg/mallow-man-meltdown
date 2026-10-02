@@ -140,6 +140,24 @@ export const Sfx = {
     [520, 660, 880, 1180].forEach((f, i) => tone(f, f * 1.4, 0.12, { vol: 0.14, delay: i * 0.05 }));
     noise(0.4, { vol: 0.1, freq: 3000, type: 'highpass' });
   },
+  // the pilot pops out of the cockpit
+  bail() {
+    if (!ready('bail', 0.5)) return;
+    tone(300, 900, 0.18, { type: 'triangle', vol: 0.18 });
+    tone(700, 1400, 0.25, { vol: 0.1, delay: 0.12 });
+  },
+  // the candy parachute snaps open
+  chute() {
+    if (!ready('chute', 0.5)) return;
+    noise(0.25, { vol: 0.22, freq: 900, to: 300 });
+    tone(220, 330, 0.2, { type: 'triangle', vol: 0.12 });
+  },
+  // boots on the frosting
+  land() {
+    if (!ready('land', 0.3)) return;
+    noise(0.12, { vol: 0.25, freq: 600, to: 200 });
+    tone(160, 90, 0.14, { vol: 0.2 });
+  },
   // warm updraft: a soft rising whoosh with a sparkle
   thermal() {
     if (!ready('thermal', 0.5)) return;

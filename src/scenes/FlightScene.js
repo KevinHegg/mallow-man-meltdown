@@ -8,12 +8,14 @@ import { Beans, GooMallows, gooAmount } from '../objects/Projectiles.js';
 import { City } from '../objects/City.js';
 import { Controls } from '../objects/Controls.js';
 import { Slingshot } from '../objects/Slingshot.js';
+import { buildPilotView } from '../objects/Pilot.js';
 import { buildBossRig } from '../objects/MarshmallowMan.js';
 import { Hud } from '../ui/Hud.js';
 import { drawSky, floatText, flushTrash, makeFx, rand, randInt, routeCollisions } from '../ui/helpers.js';
 import { Projector } from '../view/Projector.js';
 import { Valley } from '../view/Valley.js';
 import { Heights } from '../view/Heights.js';
+import { CloudCover } from '../view/CloudCover.js';
 import { PropPool, ShadowPool } from '../view/Pools.js';
 import { Wind } from '../view/Wind.js';
 import { Sfx } from '../sfx.js';
@@ -25,6 +27,14 @@ const HOVER_DEPTH = 1.7 * FOCAL; // pickups drift here for a while before passin
 const WALL_INSET = 40; // valley walls sit this far in from the screen edges at the glider's plane
 const MAX_GOO = 10;
 const KICK_DECAY = 0.9; // s: the slingshot's speed burst fades into cruise
+// The bail-out at the cloud (s after arrival): the pilot pops out, his chute opens, the cloud
+// wall rises around him, and the rooftop scene takes over inside the identical wall.
+const BAIL_EJECT = 0.95;
+const BAIL_CHUTE = 1.35;
+const BAIL_COVER = 1.55;
+const BAIL_COVER_TIME = 0.9;
+const BAIL_HANDOVER = 2.6;
+const CHUTE_SCALE = 0.9;
 
 export class FlightScene extends Phaser.Scene {
   constructor() {
@@ -213,6 +223,7 @@ export class FlightScene extends Phaser.Scene {
     // the boss is a far landmark: he slides with the camera's heading through bends
     this.distant.x = W / 2 - FOCAL * this.valley.s0 * 0.5 - this.proj.camX * 0.02;
 
+    if (this.bail) this.updateBail(dt);
     if (!this.ended && !this.arriving && !waiting) {
       this.elapsed += dt;
       this.progress = Math.min(1, this.progress + (dt * (boosting ? 1.6 : 1) * (1 + 0.6 * this.kick)) / TUNE.flightTime);
@@ -221,7 +232,6 @@ export class FlightScene extends Phaser.Scene {
       if (this.progress >= 1) this.arrive();
       if (this.city.total >= 1) this.lose('frost');
     }
-    this.hud.progress = this.progress;
     this.hud.update();
     this.syncRun();
   }
@@ -438,20 +448,83 @@ export class FlightScene extends Phaser.Scene {
     this.run.frost = this.city.frost.slice();
   }
 
+  // The cloud: the glider climbs into it, the gingerbread pilot bails out under a candy
+  // parachute, and the empty glider sails on into the cloud. No fade: the cloud wall rises around
+  // the pilot and the rooftop scene starts inside the identical wall (see CloudCover).
   arrive() {
     this.arriving = true;
     const { width: W } = this.scale;
     Sfx.arrive();
-    this.hud.banner('THE CLOUD!', 'Meltdown time', 1400);
+    this.hud.banner('THE CLOUD!', 'Bail out!', 1300);
     this.goo.popAll(this.fx);
     this.glider.cleanAll();
     this.glider.autopilot = { x: W / 2, y: this.bounds.top + 40 };
     this.tweens.add({ targets: this.distant, scale: 1, y: this.proj.horizonY + 60, alpha: 1, duration: 1500, ease: 'Quad.easeIn' });
-    this.time.delayedCall(1500, () => {
+    this.bail = { t: 0, stage: 0, swing: 0 };
+  }
+
+  updateBail(dt) {
+    const b = this.bail;
+    const { width: W, height: H } = this.scale;
+    const gl = this.glider;
+    b.t += dt;
+    this.hud.setShown(Phaser.Math.Clamp(1 - b.t / 0.5, 0, 1));
+    if (b.stage === 0 && b.t >= BAIL_EJECT) {
+      // pop! the pilot springs out of the cockpit; the empty glider flies on into the cloud
+      b.stage = 1;
+      b.pilot = buildPilotView(this);
+      b.pilot.root.setDepth(DEPTH.hud).setScale(0.85);
+      b.x = gl.x;
+      b.y = gl.y - 10;
+      b.vx = (W / 2 - gl.x) * 0.9;
+      b.vy = -640;
+      b.spin = 0;
+      gl.autopilot = { x: W / 2, y: this.proj.horizonY + 30 };
+      this.tweens.add({
+        targets: gl.view,
+        scale: 0.3,
+        alpha: 0,
+        duration: 900,
+        ease: 'Quad.easeIn',
+        onComplete: () => this.fx.puff.explode(8, gl.x, gl.y),
+      });
+      this.fx.puff.explode(6, b.x, b.y);
+      Sfx.bail();
+    }
+    if (b.stage === 1) {
+      // a tumbling hop up and out
+      b.vy += 1500 * dt;
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      b.spin += dt * 9;
+      b.pilot.root.setPosition(b.x, b.y).setRotation(Math.sin(b.spin) * 0.6);
+      if (b.t >= BAIL_CHUTE) {
+        b.stage = 2;
+        b.pilot.chute.setVisible(true).setScale(0.2);
+        this.tweens.add({ targets: b.pilot.chute, scale: 1, duration: 260, ease: 'Back.easeOut' });
+        Sfx.chute();
+      }
+    }
+    if (b.stage === 2) {
+      // floating under the chute, drifting to where the rooftop scene picks him up
+      b.swing += dt;
+      const k = Math.min(1, dt * 2.4);
+      b.x += (W / 2 - b.x) * k;
+      b.y += (H * 0.36 - b.y) * k;
+      b.scale = Phaser.Math.Linear(b.pilot.root.scale, CHUTE_SCALE, k);
+      b.pilot.root.setPosition(b.x, b.y).setScale(b.scale).setRotation(Math.sin(b.swing * 2.2) * 0.12);
+      b.pilot.legL.rotation = 0.25 + Math.sin(b.swing * 3.1) * 0.15;
+      b.pilot.legR.rotation = -0.2 + Math.sin(b.swing * 3.1 + 1) * 0.15;
+    }
+    if (b.t >= BAIL_COVER) {
+      b.cover ??= new CloudCover(this, DEPTH.hud - 1);
+      b.cover.rise((b.t - BAIL_COVER) / BAIL_COVER_TIME);
+    }
+    if (b.t >= BAIL_HANDOVER && !b.handed) {
+      b.handed = true;
       this.syncRun();
-      this.cameras.main.fadeOut(500, 255, 255, 255);
-      this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Boss'));
-    });
+      this.scene.start('Boss', { bailout: true, px: b.x, py: b.y, scale: b.scale, swing: b.swing });
+    }
   }
 
   lose(reason) {

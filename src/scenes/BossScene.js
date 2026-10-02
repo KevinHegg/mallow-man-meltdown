@@ -1,17 +1,25 @@
-// Boss: the cloud arena. Hit-and-run dives with short-range jelly beans melt the
-// Evil Marshmallow Man through 4 stages; goo he throws frosts the city below.
+// Boss: the rooftop fight. The pilot bailed out into the boss's cloud and parachutes onto a candy
+// rooftop; the Evil Marshmallow Man looms over it at giant scale (same rig, same four melt
+// stages, same attacks, aimed at a target on the ground). Run, dodge, duck behind the chimneys
+// and spray jelly beans to melt him. Goo he throws at the city frosts the skyline behind the roof.
 import * as Phaser from 'phaser';
 import { CAT, DEPTH, TIER_COLOR, TIER_LABEL, TUNE } from '../config.js';
-import { Glider } from '../objects/Glider.js';
 import { Beans, GooMallows } from '../objects/Projectiles.js';
 import { City } from '../objects/City.js';
-import { Controls } from '../objects/Controls.js';
 import { MarshmallowMan } from '../objects/MarshmallowMan.js';
+import { Pilot, PilotControls } from '../objects/Pilot.js';
+import { Rooftop } from '../objects/Rooftop.js';
 import { Hud } from '../ui/Hud.js';
 import { drawSky, floatText, flushTrash, makeFx, rand, randInt, routeCollisions, snapshot } from '../ui/helpers.js';
+import { CloudCover } from '../view/CloudCover.js';
 import { Sfx } from '../sfx.js';
 
-const CITY_H = 140;
+const Ease = Phaser.Math.Easing;
+const clamp = Phaser.Math.Clamp;
+const PART_AT = 0.25; // s: the cloud wall starts to part…
+const PART_TIME = 1.1; // …and is gone this long after
+const FALL_BAILOUT = 1.9; // s: parachuting from the cloud down to the roof
+const FALL_DROPIN = 1.3; // s: a retry drops in from above the screen
 
 export class BossScene extends Phaser.Scene {
   constructor() {
@@ -25,40 +33,52 @@ export class BossScene extends Phaser.Scene {
     this.trash = [];
     this.ended = false;
     this.bombs = []; // SAGGING splash bombs waiting to burst
-    this.swatGlobs = []; // ARM OFF! short-range swat spray
+    this.swatGlobs = []; // ARM OFF! close-range swat spray
 
     drawSky(this, [0xf68fc0, 0xffbfdc, 0xffe2d4, 0xc6ebff]);
     this.add.image(W - 90, 150, 'sunglow').setDepth(DEPTH.far - 0.1);
     const sun = this.add.circle(W - 90, 150, 56, 0xfff1a8).setDepth(DEPTH.far);
     this.tweens.add({ targets: sun, scale: 1.06, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+
+    // the rooftop and, behind it, the rest of the city (the frost meter)
+    const roofY = H - Math.round(H * 0.25);
+    this.roofY = roofY;
+    this.landY = roofY - 26; // goo aimed at the pilot lands here if it misses
+    this.city = new City(this, { height: Math.round(H * 0.11), frost: this.run.frost, bottom: roofY - 26 });
     this.decor = [];
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 5; i++) {
       const near = i >= 3;
       const c = this.add
-        .image(randInt(0, W), randInt(160, H - CITY_H - 120), 'cloud')
+        .image(randInt(0, W), randInt(140, this.city.top - 60), 'cloud')
         .setDepth(near ? DEPTH.mid : DEPTH.far)
-        .setScale(near ? rand(0.7, 0.9) : rand(0.35, 0.5))
-        .setAlpha(near ? 0.55 : 0.8);
+        .setScale(near ? rand(0.6, 0.8) : rand(0.35, 0.5))
+        .setAlpha(near ? 0.5 : 0.8);
       c.speed = near ? rand(18, 26) : rand(6, 10);
       this.decor.push(c);
     }
-
-    this.city = new City(this, { height: CITY_H, frost: this.run.frost });
+    this.roof = new Rooftop(this, { roofY });
     this.fx = makeFx(this);
-    this.boss = new MarshmallowMan(this, { x: W / 2, y: 352, scale: 0.85, fx: this.fx });
+
+    // the boss looms over the roof at giant scale, his cloud hovering just above the skyline
+    // (the cloud art reaches ~142 units below his feet)
+    const scale = clamp(1.1 + (0.2 * (H - 960)) / 209, 1.1, 1.3);
+    const k = scale / 0.85;
+    this.boss = new MarshmallowMan(this, { x: W / 2, y: this.city.top + 6 - 142 * k, scale, fx: this.fx, ground: true });
     this.boss.cityTargets = this.city.centers();
-    this.bounds = { left: 48, right: W - 48, top: 110, bottom: this.city.top - 48 };
-    this.glider = new Glider(this, W / 2, this.bounds.bottom - 30, this.bounds, this.run, this.fx);
+
+    this.pilot = new Pilot(this, W / 2, roofY, { left: 40, right: W - 40 }, this.run, this.fx);
     this.beans = new Beans(this);
-    this.goo = new GooMallows(this, { cityTop: this.city.top + 14, onCity: (m) => this.gooLandsOnCity(m) });
+    this.goo = new GooMallows(this, {
+      cityTop: this.city.top + 14,
+      onCity: (m) => this.gooLandsOnCity(m),
+      onLand: (m) => this.gooLandsOnRoof(m),
+    });
 
-    const boost = () => this.glider.boost();
-    const shake = () => this.glider.shake();
-    this.hud = new Hud(this, { mode: 'boss', glider: this.glider, city: this.city, boss: this.boss, onBoost: boost, onShake: shake });
-    this.controls = new Controls(this, this.glider, { fire: () => this.fire(), boost, shake });
+    const shake = () => this.pilot.shake();
+    this.hud = new Hud(this, { mode: 'roof', glider: this.pilot, city: this.city, onShake: shake });
+    this.controls = new PilotControls(this, this.pilot, { shake });
 
-    this.glider.on('tier', (tier, prev) => this.onTier(tier, prev));
-    this.glider.on('crashed', () => this.lose('spiral'));
+    this.pilot.on('tier', (tier, prev) => this.onTier(tier, prev));
     this.boss.on('throw', (x, y, vx, vy, opts) => this.spawnBossGoo(x, y, vx, vy, opts));
     this.boss.on('stage', (n, name) => {
       if (n < 4) this.hud.banner(name, '', 1100);
@@ -67,13 +87,72 @@ export class BossScene extends Phaser.Scene {
 
     routeCollisions(this, {
       'bean|goo': (bean, goo) => this.popGoo(goo.gameObject, bean.gameObject),
-      'glider|goo': (_g, goo) => this.gooHitsGlider(goo.gameObject),
+      'pilot|goo': (_p, goo) => this.gooHitsPilot(goo.gameObject),
       'bean|boss': (bean) => this.beanHitsBoss(bean.gameObject),
     });
 
-    this.cameras.main.fadeIn(500, 255, 255, 255);
-    this.hud.banner('MELT HIM!', 'Dive in, fire jelly beans, dive out', 1700);
-    this.time.delayedCall(1800, () => {
+    this.startArrival(data);
+  }
+
+  // The pilot comes down by parachute: out of the cloud wall the flight handed over (identical
+  // layout, same spot, same swing), or dropping in from above on a retry.
+  startArrival(data) {
+    const { width: W } = this.scale;
+    const bailout = !!data.bailout;
+    this.arrival = {
+      t: 0,
+      bailout,
+      x0: data.px ?? W / 2,
+      y0: bailout ? data.py : -60,
+      s0: data.scale ?? 0.9,
+      swing: data.swing ?? 0,
+      fall: bailout ? FALL_BAILOUT : FALL_DROPIN,
+    };
+    this.pilot.autopilot = { landing: true };
+    this.pilot.view.setDepth(DEPTH.hud);
+    this.pilot.hang(this.arrival.x0, this.arrival.y0, this.arrival.s0, this.arrival.swing);
+    this.controls.enabled = false;
+    this.hud.setShown(0);
+    if (bailout) {
+      this.cover = new CloudCover(this, DEPTH.hud - 1);
+      this.cover.part(0);
+    } else this.cameras.main.fadeIn(400, 255, 255, 255);
+  }
+
+  updateArrival(dt) {
+    const a = this.arrival;
+    a.t += dt;
+    a.swing += dt;
+    if (this.cover) {
+      const p = clamp((a.t - PART_AT) / PART_TIME, 0, 1);
+      this.cover.part(p);
+      if (p >= 1) {
+        this.cover.destroy();
+        this.cover = null;
+      }
+    }
+    const { width: W } = this.scale;
+    const u = clamp(a.t / a.fall, 0, 1);
+    const e = Ease.Sine.InOut(u);
+    this.pilot.hang(Phaser.Math.Linear(a.x0, W / 2, e), Phaser.Math.Linear(a.y0, this.roofY, e), Phaser.Math.Linear(a.s0, 1, e), a.swing, 1 - u);
+    if (u >= 1) this.landed();
+  }
+
+  landed() {
+    const p = this.pilot;
+    this.arrival = null;
+    p.land();
+    p.view.setDepth(DEPTH.glider);
+    // the chute floats away
+    const chute = this.add.image(p.x, p.y - 84, 'chute').setOrigin(0.5, 1).setDepth(DEPTH.glider + 0.5);
+    this.tweens.add({ targets: chute, y: chute.y - 220, x: chute.x + 90, angle: 25, alpha: 0, duration: 1400, ease: 'Quad.easeIn', onComplete: () => chute.destroy() });
+    this.tweens.add({ targets: p.view, scaleY: 0.86, scaleX: 1.1, duration: 90, yoyo: true });
+    this.fx.puff.explode(6, p.x, p.y);
+    Sfx.land();
+    this.controls.enabled = true;
+    this.hudFade = 0;
+    this.hud.banner('MELT HIM!', 'Hold to spray jelly beans • duck behind chimneys', 1900);
+    this.time.delayedCall(900, () => {
       if (!this.ended) this.boss.active = true;
     });
   }
@@ -87,31 +166,37 @@ export class BossScene extends Phaser.Scene {
       if (c.x > W + 120) c.x = -120;
     }
 
-    this.controls.update(dt);
-    this.glider.update(dt);
-    this.boss.update(dt, this.glider);
+    const p = this.pilot;
+    if (this.arrival) this.updateArrival(dt);
+    else {
+      this.controls.update(dt);
+      p.covered = !this.ended && !!this.roof.coverAt(p.x);
+      if (!this.ended && this.controls.firing) this.fire();
+      if (this.hudFade !== undefined && this.hudFade < 1) {
+        this.hudFade = Math.min(1, this.hudFade + dt / 0.4);
+        this.hud.setShown(this.hudFade);
+      }
+    }
+    const boss = this.boss;
+    p.update(dt, boss.x, boss.homeY - 140 * boss.scale);
+    boss.update(dt, p);
     this.beans.update(dt);
     this.goo.update(dt);
     this.updateBossGoo(dt);
     this.city.update(dt);
+    this.roof.update(dt);
     this.hud.update();
 
-    // Flying into the boss = sticky bounce. Checked every frame so lingering inside repeats it.
-    const gl = this.glider;
-    if (!this.ended && this.boss.contains(gl.x, gl.y) && gl.bonk(this.boss.x)) {
-      gl.applyGoo(gl.x + rand(-20, 20), 1.1);
-      this.fx.mdrip.explode(6, gl.x, gl.y - 20);
-    }
-
     if (!this.ended && this.city.total >= 1) this.lose('frost');
-    this.run.boosts = gl.boosts;
-    this.run.shakes = gl.shakes;
+    this.run.boosts = p.boosts;
+    this.run.shakes = p.shakes;
     this.run.frost = this.city.frost.slice();
   }
 
-  // Every boss attack is an ordinary goo-mallow (same goo amount per hit); only how it flies differs.
+  // Every boss attack is an ordinary goo-mallow (same goo amount per hit); only how it flies
+  // differs. Throws at the pilot land on the roof if they miss; throws at the city frost it.
   spawnBossGoo(x, y, vx, vy, opts) {
-    const m = this.goo.spawn(x, y, vx, vy);
+    const m = this.goo.spawn(x, y, vx, vy, opts?.city ? undefined : this.landY);
     if (opts?.burst) {
       m.burstIn = opts.burst.after;
       m.burst = opts.burst;
@@ -157,10 +242,10 @@ export class BossScene extends Phaser.Scene {
     const { n, spread } = m.burst;
     const vx = m.body.velocity.x * 60;
     const vy = m.body.velocity.y * 60;
-    const { x, y } = m;
+    const { x, y, landY } = m;
     this.goo.kill(m);
     for (let k = 0; k < n; k++) {
-      const f = this.goo.spawn(x, y, vx + (k - (n - 1) / 2) * spread, vy - 30 + rand(-20, 20));
+      const f = this.goo.spawn(x, y, vx + (k - (n - 1) / 2) * spread, vy - 30 + rand(-20, 20), landY);
       f.setTexture('splat').setScale(0.8);
     }
     this.fx.gob.explode(6, x, y);
@@ -169,7 +254,7 @@ export class BossScene extends Phaser.Scene {
   }
 
   fire() {
-    const shot = this.glider.tryFire();
+    const shot = this.pilot.tryFire();
     if (!shot) return;
     this.beans.fire(shot);
     this.run.stats.beans++;
@@ -185,16 +270,21 @@ export class BossScene extends Phaser.Scene {
     this.run.stats.pops++;
   }
 
-  gooHitsGlider(goo) {
+  gooHitsPilot(goo) {
     if (!goo?.alive || this.ended) return;
-    const result = this.glider.applyGoo(goo.x, goo.gooAmt);
+    const p = this.pilot;
+    if (p.covered) {
+      // it splats on the chimney instead
+      this.goo.kill(goo);
+      this.fx.drip.explode(5, goo.x, Math.min(goo.y, this.roofY - 120));
+      Sfx.bonk();
+      return;
+    }
+    const result = p.applyGoo(goo.x, goo.gooAmt);
     if (result === 'ignored') return;
     this.goo.kill(goo);
-    if (result === 'shielded') Sfx.pop();
-    else {
-      this.fx.drip.explode(6, goo.x, goo.y);
-      this.run.stats.splats++;
-    }
+    this.fx.drip.explode(6, goo.x, goo.y);
+    this.run.stats.splats++;
   }
 
   beanHitsBoss(bean) {
@@ -210,11 +300,16 @@ export class BossScene extends Phaser.Scene {
     Sfx.frost();
   }
 
+  gooLandsOnRoof(m) {
+    this.roof.splat(m.x);
+    this.fx.drip.explode(3, m.x, this.roofY - 6);
+  }
+
   onTier(tier, prev) {
     const order = ['clean', 'dusted', 'splattered', 'caked'];
     if (order.indexOf(tier) > order.indexOf(prev)) {
       Sfx.gooWorse(tier);
-      floatText(this, this.glider.x, this.glider.y - 50, `${TIER_LABEL[tier]}!`, TIER_COLOR[tier], 24);
+      floatText(this, this.pilot.x, this.pilot.y - 120, `${TIER_LABEL[tier]}!`, TIER_COLOR[tier], 24);
     }
   }
 
@@ -225,8 +320,9 @@ export class BossScene extends Phaser.Scene {
     const { width: W, height: H } = this.scale;
     this.boss.active = false;
     this.goo.popAll(this.fx);
-    this.glider.cleanAll();
-    this.glider.autopilot = { x: W / 2, y: this.bounds.bottom - 160 };
+    this.pilot.cleanAll();
+    this.controls.enabled = false;
+    this.tweens.add({ targets: this.pilot.view, y: this.pilot.y - 40, duration: 260, yoyo: true, repeat: 3, ease: 'Quad.easeOut' });
     this.hud.banner('MELTDOWN!', 'The city is saved!', 4000);
     Sfx.win();
     this.city.thaw(3200);
@@ -263,6 +359,7 @@ export class BossScene extends Phaser.Scene {
     if (this.ended) return;
     this.ended = true;
     this.boss.active = false;
+    this.controls.enabled = false;
     if (reason === 'frost') {
       this.city.freezeAll();
       this.hud.banner('CITY FROZEN!', '', 2000);

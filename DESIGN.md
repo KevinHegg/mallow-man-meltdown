@@ -28,15 +28,17 @@ dessert.
 
 ## Core loop
 Slingshot launch → glide the candy canyon (dodge goo volleys, catch items
-from residents, ride candy-cane thermals) → reach the cloud → melt the boss
-in staged hit-and-runs → his fluff-flood thaws the frozen city. Victory is
-measured in gallons of marshmallow.
+from residents, ride candy-cane thermals) → fly into his cloud and bail out →
+melt the boss from a rooftop → his fluff-flood thaws the frozen city. Victory
+is measured in gallons of marshmallow.
 
 ## Controls (planar, crisp)
 - Portrait phone, one thumb. Steering is left/right (+ up/down) on a single
   readable 2D plane — depth is decorative, never mechanical.
 - Drag to steer, tap/hold to fire jelly beans, tap to boost.
 - Auto-climb baseline; thermals give lift.
+- On the rooftop (finale): drag to run left/right, keep your thumb down to
+  spray jelly beans, tap SHAKE to cleanse. Same thumb, same feel.
 
 ## The goo (enemy debuff — no HP anywhere)
 Goo marshmallows explode into slime. A hit doesn't subtract health; it changes
@@ -70,22 +72,39 @@ The two interact: all self-preservation lets the city freeze; all defense
 leaves you goo'd. That tension IS the game.
 
 ## The boss: Evil Marshmallow Man
-- Perched atop his cloud. Short-range jelly-bean munitions only (jelly beans
-  melt marshmallow — established by the game's own rules) → every attack run
-  is a dive into danger.
+- Perched atop his cloud, looming over the city. Jelly beans melt marshmallow
+  (established by the game's own rules); on the rooftop the pilot's
+  jelly-bean blaster sprays them in bursts, so you dart under him, unload,
+  and dodge.
 - **His body is his health bar** — staged melting, no HUD:
   1. Pristine and smug: aimed goo-marshmallow throws at you.
   2. Sagging, dripping: gets sloppy, splash arcs rain on the city (frost clock).
-  3. Arm sloughs off: wild desperate swats (his close-range answer to your
-     short-range weapon — the boss dance: dart in, unload, dodge the swat).
+  3. Arm sloughs off: wild desperate swats (his close-range answer — on the
+     rooftop he swats straight down at you when you stand right under him:
+     the boss dance is dart in, unload, dodge the swat).
   4. Total collapse: the money shot.
 - Residents toss boost bubbles and jelly beans from windows as you pass —
   fly close to catch (risk/reward: close to buildings is where flak is thick).
 
-## Finale
-He collapses into liquid marshmallow that floods the streets — and the warm
-fluff **thaws the frozen residents**. His defeat heals the battle. The pool is
-the score screen: your performance, measured in gallons, over a saved city.
+## Finale: the bail-out (no arena, no cut)
+- **Arrival:** the flight ends by flying *into* the boss's cloud. The pilot —
+  a gingerbread man, he's from this world — bails out under a candy
+  parachute; the empty glider sails on into the cloud, its journey over. He
+  drifts down through the cloud and out of it onto a candy rooftop. One
+  continuous arrival: the cloud is the only "transition".
+- **The rooftop:** a roof in the same city and art style — frosting surface,
+  candy-cane railing, gingerbread chimneys. Chimneys are cover: behind one, goo
+  can't reach you, but you can't shoot either. The rest of the city (and its
+  frost) is right there behind the roof.
+- **The fight:** the boss looms over the roof at giant scale, same rig, same
+  four melt stages and attacks, aimed at a grounded target: aimed throws,
+  splash bombs that burst over you, the ARM OFF! swat straight down, feeble
+  lobs. Throws at the city still frost it. The pilot runs and sprays beans;
+  goo slows him, SHAKE cleans him. No bars: his body is his health bar.
+- **Payoff:** he collapses into liquid marshmallow that floods the streets —
+  and the warm fluff **thaws the frozen residents**. His defeat heals the
+  battle. The pool is the score screen: your performance, measured in
+  gallons, over a saved city.
 
 ## Design principles (from the brainstorm)
 - Legibility over cleverness: if a mechanic needs a tutorial sentence, cut it.
