@@ -166,6 +166,20 @@ export function buildTextures(scene) {
     g.fillEllipse(26, 16, 12, 6);
   });
 
+  // heavy slime sheet for the CAKED coat (wings and tail)
+  make('gcoat', 64, 34, (g) => {
+    blob(
+      g,
+      [{ e: [32, 13, 58, 18] }, { e: [18, 11, 26, 14] }, { e: [46, 12, 28, 16] }, { rr: [12, 14, 6, 14, 3] }, { c: [15, 27, 4] }, { rr: [40, 14, 6, 10, 3] }, { c: [43, 23, 3.5] }],
+      PAL.goo,
+      PAL.gooDeep,
+      2,
+    );
+    g.fillStyle(0xffffff, 0.75);
+    g.fillEllipse(24, 8, 16, 4);
+    g.fillCircle(46, 8, 1.8);
+  });
+
   make('drip', 12, 16, (g) => {
     g.fillStyle(PAL.goo, 1);
     g.fillCircle(6, 10, 4.5);

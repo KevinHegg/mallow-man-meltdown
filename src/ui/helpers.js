@@ -113,11 +113,22 @@ export function makeFx(scene) {
   const mk = (key, cfg, depth = DEPTH.fx) => scene.add.particles(0, 0, key, { emitting: false, ...cfg }).setDepth(depth);
   return {
     drip: mk('drip', {
+      maxAliveParticles: 40,
       lifespan: 900,
       speedX: { min: -20, max: 20 },
       speedY: { min: 30, max: 90 },
       gravityY: 520,
       scale: { start: 1, end: 0.5 },
+      alpha: { start: 1, end: 0 },
+    }),
+    // goo blobs flung off the glider by a shake / boost
+    gob: mk('splat', {
+      maxAliveParticles: 40,
+      lifespan: 700,
+      speed: { min: 140, max: 320 },
+      gravityY: 700,
+      rotate: { min: 0, max: 360 },
+      scale: { start: 0.6, end: 0.25 },
       alpha: { start: 1, end: 0 },
     }),
     puff: mk('puff', {

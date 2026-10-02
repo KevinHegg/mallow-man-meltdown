@@ -50,7 +50,7 @@ In dev builds the game instance is available as `window.__game`.
 
 - **Flight** (~40 s): fly into the horizon down a gently curving candy valley, with sugar-cube towers and gumdrop houses streaming past on both sides and candy-cane arches sweeping overhead. The glider banks into turns and pitches on climbs and dives (the horizon dips and rises with it), and wind streaks pick up with speed. The boss sits on his cloud at the horizon and grows as you get closer (he is the progress meter). Dodge sugar-cube ledges, licorice gates and gumdrops as they come at you out of the distance (bonks knock you back). Grab soda bubbles (+1 Boost) and sugar shakers (+1 Shake) while they hover at mid-depth. The boss lobs goo-mallows at you and at the city.
 - **Boss**: he patrols his cloud and throws goo-mallows at you or at the city. Jelly beans have short range, so you have to dive in, fire, and dive back out. He melts through 4 stages: pristine → sagging → arm sloughs off → collapse. Then he melts away and a fluff flood fills the screen.
-- **Goo tiers** (dusted / splattered / caked): each splat adds mass, so the glider responds more slowly. The weight also drags you down, and off-centre goo lists you sideways, which also skews your aim.
+- **Goo tiers** (dusted / splattered / caked): you can see them on the glider. Drips, then blobs, then a heavy green coat, plus a lean and wobble that grow with each tier; CAKED also pulses a green glow at the screen edges. Each splat adds mass, so the glider responds more slowly. The weight also drags you down, and off-centre goo lists you sideways, which also skews your aim.
 - **Cleansing:** goo drips off over time (slower when caked). **Bubble Boost** sheds about half and gives you altitude plus a brief bubble shield. **Shake** fully cleans you, but you wobble helplessly for 0.9 s and goo sticks harder.
 - **Lose conditions:**
   - **Death spiral:** caked with no Boosts or Shakes left for 2.6 s.
@@ -66,6 +66,7 @@ src/
   art/textures.js      every procedural texture
   objects/
     Glider.js          handling model: mass-aware spring, goo splats, CoG list, cleanses, spiral
+    GooCoat.js         pooled slime sprites that show the goo tier on the glider
     Controls.js        drag-steer / tap-fire / keyboard
     Projectiles.js     jelly beans + goo-mallows (Matter sensors)
     City.js            skyline + frost meter

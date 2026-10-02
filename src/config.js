@@ -17,8 +17,8 @@ export const PAL = {
   mallowPink: 0xffb3d1,
   toast: 0xe7a95b,
   toastDark: 0xc9873f,
-  goo: 0x9be7ff,
-  gooDeep: 0x4fb6df,
+  goo: 0x9be86a, // green slime (DESIGN.md: "green slime inside, a Ghostbusters nod")
+  gooDeep: 0x3f9e4a,
   frost: 0xe4f8ff,
   frostLine: 0x8fd3f0,
   licorice: 0xe0304e,

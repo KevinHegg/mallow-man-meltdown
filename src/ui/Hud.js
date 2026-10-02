@@ -52,7 +52,31 @@ export class Hud {
     this.warnSub = txt(scene, W / 2, city.top - 114, 'No cleanses left — drip it off!', 16, '#d8364f').setDepth(D + 4).setVisible(false);
     this.lastWarnBeep = 0;
     this.cache = {};
+    this.vignette = this.makeVignette(W, H);
+    this.lastNow = scene.time.now;
     this.update();
+  }
+
+  // Soft green glow around the screen edges, baked once per screen size; pulses while CAKED.
+  makeVignette(W, H) {
+    const key = `vignette_${W}x${H}`;
+    if (!this.scene.textures.exists(key)) {
+      const g = this.scene.add.graphics();
+      const step = 6;
+      const bands = 16;
+      for (let i = 0; i < bands; i++) {
+        const a = 0.42 * Math.pow(1 - i / bands, 2);
+        const o = i * step;
+        g.fillStyle(0x5fd35a, a);
+        g.fillRect(o, o, W - 2 * o, step);
+        g.fillRect(o, H - o - step, W - 2 * o, step);
+        g.fillRect(o, o + step, step, H - 2 * o - 2 * step);
+        g.fillRect(W - o - step, o + step, step, H - 2 * o - 2 * step);
+      }
+      g.generateTexture(key, W, H);
+      g.destroy();
+    }
+    return this.scene.add.image(W / 2, H / 2, key).setDepth(D - 2).setAlpha(0);
   }
 
   chip(x, y, align) {
@@ -176,6 +200,13 @@ export class Hud {
     const ready = gl.canAct;
     this.refreshButton(this.boostBtn, gl.boosts, TUNE.boostMax, ready);
     this.refreshButton(this.shakeBtn, gl.shakes, TUNE.shakeMax, ready);
+
+    const now = this.scene.time.now;
+    const dt = Math.min(0.1, (now - this.lastNow) / 1000);
+    this.lastNow = now;
+    const caked = gl.tier === 'caked' && !gl.busy;
+    const vTarget = caked ? 0.6 + Math.sin(now / 280) * 0.3 : 0;
+    this.vignette.setAlpha(this.vignette.alpha + (vTarget - this.vignette.alpha) * Math.min(1, dt * 6));
 
     const stalling = gl.stall > 0 && !gl.busy;
     this.warn.setVisible(stalling);

@@ -5,6 +5,7 @@ import * as Phaser from 'phaser';
 import { CAT, DEPTH, MASK, TUNE } from '../config.js';
 import { mix } from '../art/textures.js';
 import { Sfx } from '../sfx.js';
+import { GooCoat } from './GooCoat.js';
 
 const HALF_SPAN = 46;
 const clamp = Phaser.Math.Clamp;
@@ -16,7 +17,11 @@ export function tierFor(goo) {
   return 'clean';
 }
 
-const splatScale = (m) => 0.45 + 0.42 * Math.sqrt(m);
+// Art-only list and wobble per tier (clean, dusted, splattered, caked) so the handling
+// penalty reads on screen. Hitbox, aim and drift keep using the physical `list`/`roll`.
+const TIER_LEVEL = { clean: 0, dusted: 1, splattered: 2, caked: 3 };
+const ART_LIST = [0, 0.05, 0.12, 0.2];
+const ART_WOBBLE = [0, 0.025, 0.05, 0.06];
 
 export class Glider extends Phaser.Events.EventEmitter {
   constructor(scene, x, y, bounds, charges, fx) {
@@ -32,6 +37,12 @@ export class Glider extends Phaser.Events.EventEmitter {
     this.targetY = y;
     this.list = 0;
     this.bank = 0;
+    this.artList = 0;
+    this.artWobble = 0;
+    this.artOffset = 0;
+    this.attBank = null; // flight-view bank/pitch (FlightScene); null elsewhere
+    this.attPitch = 0;
+    this.lastHitSide = 1;
     this.roll = 0;
     this.t = 0;
     this.spin = 0;
@@ -44,7 +55,6 @@ export class Glider extends Phaser.Events.EventEmitter {
     this.shakeT = 0;
     this.boostT = 0;
     this.stall = 0;
-    this.dripAcc = 0;
     this.spiraling = false;
     this.crashed = false;
     this.autopilot = null;
@@ -55,6 +65,7 @@ export class Glider extends Phaser.Events.EventEmitter {
     this.gooLayer = scene.add.container(0, 0);
     this.shield = scene.add.image(0, 0, 'bubble').setScale(4).setAlpha(0);
     this.view.add([this.sprite, this.gooLayer, this.shield]);
+    this.coat = new GooCoat(scene, this.gooLayer, fx);
 
     this.body = scene.matter.add.rectangle(x, y, 92, 40, {
       isSensor: true,
@@ -163,7 +174,7 @@ export class Glider extends Phaser.Events.EventEmitter {
     const jitter = shaking ? Math.sin(this.t * 53) * 5 : 0;
     this.view.setPosition(this.x + jitter, this.y + Math.sin(this.t * 2.4) * 2.5);
     this.view.rotation = this.roll;
-    this.sprite.setTint(mix(0xffffff, 0xa8dcff, clamp(goo / TUNE.gooCap, 0, 1)));
+    this.sprite.setTint(mix(0xffffff, 0xc6f2b0, clamp(goo / TUNE.gooCap, 0, 1)));
 
     this.updateGoo(dt, goo);
     this.syncBody();
@@ -174,6 +185,16 @@ export class Glider extends Phaser.Events.EventEmitter {
       this.tier = tier;
       this.emit('tier', tier, prev);
     }
+
+    // goo you can see: the coat, plus an art-only list toward the gooey side and a wobble
+    const lvl = shaking ? 0 : TIER_LEVEL[tier];
+    const side = Math.abs(torque) > 0.05 ? Math.sign(torque) : this.lastHitSide;
+    this.artList += (side * ART_LIST[lvl] - this.artList) * Math.min(1, dt * 3);
+    this.artWobble += (ART_WOBBLE[lvl] - this.artWobble) * Math.min(1, dt * 2);
+    this.artOffset = this.artList + Math.sin(this.t * (6 + lvl)) * this.artWobble;
+    const g = this.goo;
+    this.coat.update(dt, g, g > 0.01 ? clamp(torque / g, -1, 1) : 0);
+    this.applyArt();
 
     const doomed = tier === 'caked' && this.boosts === 0 && this.shakes === 0 && !shaking && !this.autopilot;
     if (doomed) {
@@ -187,26 +208,23 @@ export class Glider extends Phaser.Events.EventEmitter {
   updateGoo(dt, goo) {
     // heavier coats harden and drip off more slowly
     const rate = TUNE.dripBase / (1 + goo * 0.22);
-    for (const s of this.splats) {
-      s.m -= rate * dt;
-      s.pop = Math.max(0, s.pop - dt * 4);
-      s.img.setScale(splatScale(Math.max(s.m, 0.05)) * (1 + s.pop));
+    const splats = this.splats;
+    for (let i = splats.length - 1; i >= 0; i--) {
+      splats[i].m -= rate * dt;
+      if (splats[i].m < 0.08) splats.splice(i, 1); // in place: no per-frame arrays
     }
-    const gone = this.splats.filter((s) => s.m < 0.08);
-    if (gone.length) {
-      this.splats = this.splats.filter((s) => s.m >= 0.08);
-      for (const s of gone) {
-        this.scene.tweens.add({ targets: s.img, alpha: 0, duration: 250, onComplete: () => s.img.destroy() });
-      }
-    }
-    this.dripAcc += goo * dt * 1.4;
-    while (this.dripAcc > 1) {
-      this.dripAcc -= 1;
-      if (!this.splats.length) break;
-      const s = Phaser.Utils.Array.GetRandom(this.splats);
-      const p = this.localToWorld(s.ox * HALF_SPAN, s.oy + 8);
-      this.fx.drip.emitParticleAt(p.x, p.y);
-    }
+    this.coat.drip(goo * 1.4, dt); // drops fall from the coat as it drips off
+  }
+
+  // Art transform on top of the physical roll: flight bank/pitch, goo list and wobble,
+  // and a squash-and-stretch shudder while shaking.
+  applyArt() {
+    const bankOff = this.attBank === null ? 0 : this.attBank - this.bank;
+    const rot = this.busy ? 0 : bankOff + this.artOffset;
+    const sx = this.shakeT > 0 ? 1 + Math.sin(this.t * 38) * 0.08 : 1;
+    const sy = (1 + this.attPitch * 0.14) * (this.shakeT > 0 ? 1 - Math.sin(this.t * 38) * 0.06 : 1);
+    this.sprite.setRotation(rot).setScale(sx, sy);
+    this.gooLayer.setRotation(rot).setScale(sx, sy);
   }
 
   syncBody() {
@@ -226,17 +244,11 @@ export class Glider extends Phaser.Events.EventEmitter {
     amount = Math.min(amount, Math.max(0.05, TUNE.gooCap - this.goo));
     const rel = clamp((worldX - this.x) / HALF_SPAN, -1, 1);
     const ox = clamp(rel * 0.85 + Phaser.Math.FloatBetween(-0.2, 0.2), -1, 1);
-    let s = this.splats.find((p) => Math.abs(p.ox - ox) < 0.22);
-    if (s) {
-      s.m += amount;
-    } else {
-      const img = this.scene.add.image(ox * HALF_SPAN, Phaser.Math.Between(-4, 8), 'splat');
-      img.setAngle(Phaser.Math.Between(-30, 30));
-      this.gooLayer.add(img);
-      s = { m: amount, ox, oy: img.y, img, pop: 0 };
-      this.splats.push(s);
-    }
-    s.pop = 0.4;
+    const s = this.splats.find((p) => Math.abs(p.ox - ox) < 0.22);
+    if (s) s.m += amount;
+    else this.splats.push({ m: amount, ox });
+    this.coat.popNear(ox * HALF_SPAN);
+    this.lastHitSide = rel >= 0 ? 1 : -1;
     this.vx += (rel >= 0 ? 1 : -1) * 60;
     this.vy += 90;
     Sfx.splat();
@@ -259,10 +271,8 @@ export class Glider extends Phaser.Events.EventEmitter {
     }
     this.boosts--;
     this.boostT = 0.8;
-    for (const s of this.splats) {
-      this.flingGob(s, 0.6);
-      s.m *= TUNE.boostKeep;
-    }
+    this.coat.fling(0.5); // the shed portion flies off
+    for (const s of this.splats) s.m *= TUNE.boostKeep;
     this.vy = Math.min(this.vy, 0) - 620;
     this.targetY = clamp(this.targetY - 200, this.bounds.top, this.bounds.bottom);
     this.fx.bubble.explode(18, this.x, this.y + 20);
@@ -282,34 +292,11 @@ export class Glider extends Phaser.Events.EventEmitter {
     }
     this.shakes--;
     this.shakeT = TUNE.shakeTime;
-    for (const s of this.splats) {
-      this.flingGob(s, 1);
-      s.img.destroy();
-    }
+    this.coat.startShake(this.goo, TUNE.shakeTime); // blobs fling off during the wobble
     this.splats = [];
     Sfx.shake();
     this.emit('shake');
     return true;
-  }
-
-  flingGob(s, frac) {
-    const p = this.localToWorld(s.ox * HALF_SPAN, s.oy);
-    const gob = this.scene.add
-      .image(p.x, p.y, 'splat')
-      .setScale(splatScale(s.m) * frac)
-      .setDepth(DEPTH.glider - 1);
-    const dir = s.ox >= 0 ? 1 : -1;
-    this.scene.tweens.add({
-      targets: gob,
-      x: p.x + dir * Phaser.Math.Between(80, 160),
-      y: p.y + Phaser.Math.Between(60, 180),
-      angle: dir * 200,
-      alpha: 0,
-      scale: gob.scale * 0.5,
-      duration: 650,
-      ease: 'Quad.easeIn',
-      onComplete: () => gob.destroy(),
-    });
   }
 
   // Knocked back by an obstacle or the boss. Returns false while on cooldown.
@@ -331,10 +318,9 @@ export class Glider extends Phaser.Events.EventEmitter {
   // Visual-only attitude for the flight view: a smoother, deeper bank and a pitch on the art.
   // The hitbox, aim and goo physics keep using `roll`, so mechanics are unchanged.
   setAttitude(bank, pitch) {
-    const off = this.busy ? 0 : bank - this.bank;
-    const sy = 1 + pitch * 0.14;
-    this.sprite.setRotation(off).setScale(1, sy);
-    this.gooLayer.setRotation(off).setScale(1, sy);
+    this.attBank = bank;
+    this.attPitch = pitch;
+    this.applyArt();
   }
 
   addCharge(kind) {
@@ -374,10 +360,7 @@ export class Glider extends Phaser.Events.EventEmitter {
 
   // Gently sheds all goo (used for victory / scene transitions).
   cleanAll() {
-    for (const s of this.splats) {
-      this.flingGob(s, 0.8);
-      s.img.destroy();
-    }
+    this.coat.fling(0.6);
     this.splats = [];
     this.stall = 0;
   }
