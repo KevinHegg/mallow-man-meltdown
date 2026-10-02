@@ -9,7 +9,73 @@ city. Melt him with jelly beans before his goo cakes your wings or his frost
 covers the city. Nothing dies; the finale is dessert.
 
 - `DESIGN.md` — the full game design (mechanics, boss stages, win/lose)
-- `claude-code-scaffold-prompt.md` — paste-ready prompt to scaffold the
-  Phaser 3 + Matter + Vite repo
+- `claude-code-scaffold-prompt.md` — the prompt this playable scaffold was built from
 
-Recommended stack: Phaser 3 + Matter physics (built in) + Vite. See DESIGN.md.
+**Stack:** Phaser 3.90 (Matter physics) · Vite · plain JavaScript. All art is procedural (Phaser Graphics → textures) and all sound is a tiny WebAudio synth, so there are no asset files.
+
+## Run
+
+```bash
+npm install
+npm run dev
+```
+
+`npm run dev` opens the game in your browser. The dev server is also exposed on your LAN, so you can open the printed "Network" URL on a phone on the same Wi-Fi.
+
+- `npm run build` writes a static build to `dist/`
+- `npm run preview` serves that build locally
+
+### Dev shortcuts (query string)
+
+| URL | Effect |
+| --- | --- |
+| `?scene=boss` | Title tap goes straight to the boss fight |
+| `?scene=win` / `?scene=lose` | Title tap goes to the end screen |
+| `?debug` | Shows Matter physics bodies |
+
+In dev builds the game instance is available as `window.__game`.
+
+## Controls
+
+| | Touch / mouse | Keyboard |
+| --- | --- | --- |
+| Steer | Drag anywhere (relative, like a trackpad) | Arrows / WASD |
+| Fire jelly beans | Every tap/click (a second finger can tap-fire while the first steers) | Space |
+| Bubble Boost | BOOST button | Z |
+| Shake | SHAKE button | X |
+
+## How it plays
+
+- **Flight** (~40 s): climb the canyon. Dodge sugar-cube ledges, licorice gates and gumdrops (bonks knock you back). Grab soda bubbles (+1 Boost) and sugar shakers (+1 Shake). The distant boss lobs goo-mallows down at you.
+- **Boss**: he patrols his cloud and throws goo-mallows at you or at the city. Jelly beans have short range, so you have to dive in, fire, and dive back out. He melts through 4 stages: pristine → sagging → arm sloughs off → collapse. Then he melts away and a fluff flood fills the screen.
+- **Goo tiers** (dusted / splattered / caked): each splat adds mass, so the glider responds more slowly. The weight also drags you down, and off-centre goo lists you sideways, which also skews your aim.
+- **Cleansing:** goo drips off over time (slower when caked). **Bubble Boost** sheds about half and gives you altitude plus a brief bubble shield. **Shake** fully cleans you, but you wobble helplessly for 0.9 s and goo sticks harder.
+- **Lose conditions:**
+  - **Death spiral:** caked with no Boosts or Shakes left for 2.6 s.
+  - **City frost:** goo that reaches the city frosts buildings, and fully frozen buildings spread frost to their neighbours. You lose at 100%.
+
+## Project layout
+
+```
+src/
+  main.js              game config, portrait sizing, gesture blocking, rotate-pause
+  config.js            palette, collision categories, depth order, all tuning knobs (TUNE)
+  sfx.js               WebAudio synth (no audio files)
+  art/textures.js      every procedural texture
+  objects/
+    Glider.js          handling model: mass-aware spring, goo splats, CoG list, cleanses, spiral
+    Controls.js        drag-steer / tap-fire / keyboard
+    Projectiles.js     jelly beans + goo-mallows (Matter sensors)
+    City.js            skyline + frost meter
+    MarshmallowMan.js  boss rig, throw AI (ballistic aim), 4-stage melt
+  ui/
+    Hud.js             bars, goo/frost chips, Boost/Shake buttons, banners
+    helpers.js         text/sky/button helpers, particles, collision router, run state
+  scenes/              Boot (textures + title), Flight, Boss, End
+```
+
+Gameplay is strictly 2D on the screen plane. Depth is only decorative, from parallax tile layers and the distant boss. Most balance lives in `TUNE` in `src/config.js`.
+
+## Deploy (Netlify free tier)
+
+`netlify.toml` is included (build `npm run build`, publish `dist`, Node 22). Connect the repo in Netlify, or drag the `dist/` folder onto app.netlify.com/drop.
