@@ -178,6 +178,16 @@ export const Sfx = {
     tone(420, 90, 0.6, { type: 'sawtooth', vol: 0.12 });
     noise(0.5, { vol: 0.25, freq: 600, to: 120 });
   },
+  burst() {
+    if (!ready('burst', 0.08)) return;
+    noise(0.25, { vol: 0.3, freq: 1800, to: 300, type: 'bandpass', q: 1.2 });
+    tone(520, 180, 0.18, { type: 'triangle', vol: 0.16 });
+  },
+  swat() {
+    if (!ready('swat', 0.2)) return;
+    noise(0.28, { vol: 0.28, freq: 400, to: 2400, type: 'bandpass', q: 2 });
+    tone(140, 90, 0.2, { type: 'sawtooth', vol: 0.08 });
+  },
   slough() {
     if (!ready('slough')) return;
     tone(300, 60, 0.8, { type: 'triangle', vol: 0.2 });

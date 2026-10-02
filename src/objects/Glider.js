@@ -8,6 +8,9 @@ import { Sfx } from '../sfx.js';
 import { GooCoat } from './GooCoat.js';
 
 const HALF_SPAN = 46;
+// Art is drawn a third bigger so bank, coat, list and wobble read on a phone. The Matter
+// hitbox and aim (HALF_SPAN, localToWorld) stay at the original size: art scale only.
+const ART_SCALE = 4 / 3;
 const clamp = Phaser.Math.Clamp;
 
 export function tierFor(goo) {
@@ -60,7 +63,7 @@ export class Glider extends Phaser.Events.EventEmitter {
     this.autopilot = null;
     this.tier = 'clean';
 
-    this.view = scene.add.container(x, y).setDepth(DEPTH.glider);
+    this.view = scene.add.container(x, y).setDepth(DEPTH.glider).setScale(ART_SCALE);
     this.sprite = scene.add.image(0, 0, 'glider');
     this.gooLayer = scene.add.container(0, 0);
     this.shield = scene.add.image(0, 0, 'bubble').setScale(4).setAlpha(0);

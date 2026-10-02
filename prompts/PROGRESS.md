@@ -4,4 +4,4 @@
 - [x] prompt2.md — into-the-horizon valley view (pseudo-3D rework) — DONE
 - [x] prompt3.md — flight feel: banking, climbs/dives, curving valley, arches — DONE
 - [x] prompt4.md — goo you can feel: visible goo tiers, list/wobble, drips, shake cleanse — DONE
-- [ ] prompt5.md — the boss fights back: staged attacks and melt drama — PENDING
+- [x] prompt5.md — the boss fights back: staged attacks and melt drama — DONE

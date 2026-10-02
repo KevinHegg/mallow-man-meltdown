@@ -161,12 +161,35 @@ export function makeFx(scene) {
       tint: [0xffffff, 0xcff4ff, 0x9be7ff],
     }),
     mdrip: mk('mdrip', {
+      maxAliveParticles: 50,
       lifespan: 1000,
       speedX: { min: -60, max: 60 },
       speedY: { min: -40, max: 60 },
       gravityY: 600,
       scale: { start: 1, end: 0.6 },
       alpha: { start: 1, end: 0 },
+    }),
+    // boss melt: marshmallow chunks sloughing off his body
+    slough: mk('msplat', {
+      maxAliveParticles: 16,
+      lifespan: 1400,
+      speedX: { min: -30, max: 30 },
+      speedY: { min: 0, max: 40 },
+      gravityY: 380,
+      rotate: { min: -40, max: 40 },
+      scale: { start: 0.5, end: 0.35 },
+      alpha: { start: 1, end: 0 },
+    }),
+    // boss sweat beads (ARM OFF!)
+    sweat: mk('bubble', {
+      maxAliveParticles: 12,
+      lifespan: 700,
+      speedX: { min: -60, max: 60 },
+      speedY: { min: -40, max: 20 },
+      gravityY: 500,
+      scale: { start: 0.35, end: 0.2 },
+      alpha: { start: 1, end: 0 },
+      tint: 0xbfeaff,
     }),
   };
 }

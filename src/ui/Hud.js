@@ -124,10 +124,19 @@ export class Hud {
         scene.tweens.add({ targets: [bg, img], scale: '*=0.85', duration: 70, yoyo: true });
       }
     });
-    return { bg, img, lab, pips, count: -1, enabled: null };
+    return { bg, img, lab, pips, x, y, r, count: -1, alpha: null };
   }
 
-  refreshButton(btn, count, max, enabled) {
+  // True when the glider's art (not its hitbox) sits under this button.
+  covers(btn, gl) {
+    const hw = 56 * gl.view.scaleX;
+    const hh = 32 * gl.view.scaleY;
+    const cx = Phaser.Math.Clamp(btn.x, gl.x - hw, gl.x + hw);
+    const cy = Phaser.Math.Clamp(btn.y, gl.y - hh, gl.y + hh);
+    return Math.hypot(cx - btn.x, cy - btn.y) < btn.r;
+  }
+
+  refreshButton(btn, count, max, enabled, covered) {
     if (btn.count !== count) {
       btn.count = count;
       btn.pips.clear();
@@ -140,10 +149,10 @@ export class Hud {
         btn.pips.strokeCircle(px, 0, 6);
       }
     }
-    const on = enabled && count > 0;
-    if (btn.enabled !== on) {
-      btn.enabled = on;
-      const a = on ? 1 : 0.4;
+    // dim when unavailable; fade further while the glider flies underneath so both stay readable
+    const a = (enabled && count > 0 ? 1 : 0.4) * (covered ? 0.45 : 1);
+    if (btn.alpha !== a) {
+      btn.alpha = a;
       btn.bg.setAlpha(a);
       btn.img.setAlpha(a);
       btn.lab.setAlpha(a);
@@ -198,8 +207,8 @@ export class Hud {
     this.setChip(this.frostChip, `CITY FROST ${frost}%`, frost >= 66 ? '#d8364f' : frost >= 33 ? '#3a95c9' : '#7fb8d6');
 
     const ready = gl.canAct;
-    this.refreshButton(this.boostBtn, gl.boosts, TUNE.boostMax, ready);
-    this.refreshButton(this.shakeBtn, gl.shakes, TUNE.shakeMax, ready);
+    this.refreshButton(this.boostBtn, gl.boosts, TUNE.boostMax, ready, this.covers(this.boostBtn, gl));
+    this.refreshButton(this.shakeBtn, gl.shakes, TUNE.shakeMax, ready, this.covers(this.shakeBtn, gl));
 
     const now = this.scene.time.now;
     const dt = Math.min(0.1, (now - this.lastNow) / 1000);

@@ -11,6 +11,25 @@ const SHOULDER_X = 96;
 const HAND_REACH = 90; // arm origin → hand centre, in rig units
 const ARM_REST = 0.32;
 
+// How each stage fights (behaviour only: goo amounts, damage and HP thresholds live elsewhere).
+//   PRISTINE   smug: slow, aimed, unhurried throws
+//   SAGGING    sloppy: lobbed goo bombs that burst mid-air into a widening splatter
+//   ARM OFF!   desperate: fast, wild throws, plus a swat when the glider gets close
+//   COLLAPSING feeble: slow drooping lobs and long pauses; more drips than attacks
+const STYLE = [
+  { interval: 2.2, windup: 460, follow: 140, raise: 2.7 },
+  { interval: 2.4, windup: 380, follow: 130, raise: 2.7 },
+  { interval: 0.95, windup: 190, follow: 90, raise: 2.9 },
+  { interval: 3.0, windup: 650, follow: 280, raise: 1.5 },
+];
+// Melt drama per stage: marshmallow drips and sloughing chunks per second, and puddle size.
+const MELT_DRIPS = [0.4, 2.5, 4, 8];
+const MELT_SLOUGH = [0, 0.6, 1.2, 2.2];
+const PUDDLE = [0, 0.35, 0.65, 1];
+const SWAT_RANGE = 300; // px from his chest at which the one-armed boss swats
+const SWAT_COOLDOWN = 1.8;
+const SPLASH = { n: 3, spread: 120 };
+
 // Hitbox per stage, in rig units relative to the feet.
 const HITBOX = [
   { w: 180, h: 300, cy: -165 },
@@ -65,6 +84,13 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
     this.flashT = 0;
     this.cityTargets = [];
     this.pose = { bodySX: 1, bodySY: 1, headDrop: 0, headRot: 0, headX: 0, armRest: ARM_REST, legSY: 1, puddle: 0, sink: 0 };
+    this.dripAcc = 0;
+    this.sloughAcc = 0;
+    this.sweatAcc = 0;
+    this.trailAcc = 0;
+    this.swatCd = 0;
+    this.recoil = 0; // head/body jolt after the arm tears off
+    this.pt = { x: 0, y: 0 };
     this.makeHitbox();
   }
 
@@ -101,7 +127,10 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
       this.x = this.homeX + Math.sin(this.t * speed) * 95;
     }
     const bob = Math.sin(this.t * 1.7) * 3;
-    r.root.setPosition(this.x, this.homeY + bob + p.sink);
+    this.recoil = Math.max(0, this.recoil - dt * 1.5);
+    // ARM OFF!: angry and scared — he trembles
+    const tremble = (this.stage === 2 && !this.dead ? Math.sin(this.t * 31) * 2.2 : 0) + Math.sin(this.t * 40) * this.recoil * 8;
+    r.root.setPosition(this.x + tremble, this.homeY + bob + p.sink);
     this.cloud.setPosition(this.x, this.homeY + 52 + Math.sin(this.t * 1.7 + 0.6) * 4);
     this.puddle.setPosition(this.x, this.homeY - 6 + bob);
     this.puddle.setScale(0.2 + p.puddle * 0.8, 0.2 + p.puddle * 0.8).setAlpha(Math.min(1, p.puddle * 1.5));
@@ -110,7 +139,7 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
     r.body.setScale(p.bodySX, p.bodySY * breath);
     const bodyTop = -48 - 160 * p.bodySY * breath;
     r.headC.setPosition(p.headX, bodyTop + 12 + p.headDrop);
-    r.headC.rotation = p.headRot + Math.sin(this.t * 2.1) * 0.03;
+    r.headC.rotation = p.headRot + Math.sin(this.t * 2.1) * 0.03 + Math.sin(this.t * 25) * this.recoil * 0.25;
     r.armL.setPosition(-SHOULDER_X * p.bodySX, bodyTop + 22);
     r.armR.setPosition(SHOULDER_X * p.bodySX, bodyTop + 22);
     r.stump.setPosition(-SHOULDER_X * p.bodySX + 14, bodyTop + 28);
@@ -128,7 +157,15 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
       this.scene.matter.body.setPosition(this.hitbox, { x: this.x, y: this.homeY + bob + this.hb.cy * this.scale });
     }
 
+    if (!this.dead) this.melt(dt);
+
     if (this.debris?.active) {
+      // the torn-off arm trails goo and marshmallow as it tumbles
+      this.trailAcc += dt * 22;
+      while (this.trailAcc >= 1) {
+        this.trailAcc -= 1;
+        (Math.random() < 0.5 ? this.fx.drip : this.fx.mdrip).emitParticleAt(this.debris.x, this.debris.y);
+      }
       if (this.debris.y > this.scene.scale.height - 150) {
         this.fx.puff.explode(10, this.debris.x, this.debris.y);
         this.debris.destroy();
@@ -138,7 +175,44 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
 
     if (this.active && !this.dead) {
       this.throwT -= dt;
-      if (this.throwT <= 0 && !this.throwing) this.startThrow(glider);
+      this.swatCd -= dt;
+      const near = Phaser.Math.Distance.Between(glider.x, glider.y, this.x, this.homeY - 140 * this.scale) < SWAT_RANGE;
+      if (this.stage === 2 && !this.throwing && this.swatCd <= 0 && near && !glider.busy) this.swat(glider);
+      else if (this.throwT <= 0 && !this.throwing) this.startThrow(glider);
+    }
+  }
+
+  // A random point on his body (for drips and sloughing chunks).
+  bodyPoint() {
+    const p = this.pose;
+    const root = this.rig.root;
+    this.pt.x = root.x + Phaser.Math.FloatBetween(-80, 80) * this.scale * p.bodySX;
+    this.pt.y = root.y + (-48 - Phaser.Math.FloatBetween(10, 150) * p.bodySY) * this.scale;
+    return this.pt;
+  }
+
+  melt(dt) {
+    this.dripAcc += dt * MELT_DRIPS[this.stage];
+    while (this.dripAcc >= 1) {
+      this.dripAcc -= 1;
+      const pt = this.bodyPoint();
+      this.fx.mdrip.emitParticleAt(pt.x, pt.y);
+    }
+    this.sloughAcc += dt * MELT_SLOUGH[this.stage];
+    while (this.sloughAcc >= 1) {
+      this.sloughAcc -= 1;
+      const pt = this.bodyPoint();
+      this.fx.slough.emitParticleAt(pt.x, pt.y);
+    }
+    if (this.stage === 2) {
+      // nervous sweat beads off his head
+      this.sweatAcc += dt * 3;
+      while (this.sweatAcc >= 1) {
+        this.sweatAcc -= 1;
+        const h = this.rig.headC;
+        const side = Math.random() < 0.5 ? -1 : 1;
+        this.fx.sweat.emitParticleAt(this.rig.root.x + (h.x + side * 60) * this.scale, this.rig.root.y + (h.y - 70) * this.scale);
+      }
     }
   }
 
@@ -153,25 +227,26 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
   }
 
   startThrow(glider) {
+    const st = STYLE[this.stage];
     const side = this.armGone ? 'R' : glider.x < this.x ? 'L' : 'R';
     const arm = side === 'L' ? this.rig.armL : this.rig.armR;
     const sgn = side === 'L' ? 1 : -1;
     const tweens = this.scene.tweens;
     this.throwing = true;
     arm.busy = true;
-    this.throwT = [1.9, 1.6, 1.4, 1.2][this.stage] * Phaser.Math.FloatBetween(0.85, 1.15);
+    this.throwT = st.interval * Phaser.Math.FloatBetween(0.85, 1.15);
     Sfx.windup();
     tweens.add({
       targets: arm,
-      rotation: sgn * 2.7,
-      duration: 320,
+      rotation: sgn * st.raise,
+      duration: st.windup,
       ease: 'Sine.easeOut',
       onComplete: () => {
         if (!this.dead) this.release(side, glider);
         tweens.add({
           targets: arm,
           rotation: sgn * 0.9,
-          duration: 120,
+          duration: st.follow,
           ease: 'Quad.easeIn',
           onComplete: () =>
             tweens.add({
@@ -189,31 +264,109 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
     });
   }
 
-  // Solves a ballistic arc to either the glider (with lead) or a city building.
+  // Ballistic lob from the hand to (tx, ty) arriving after T seconds.
+  lob(hand, tx, ty, T, opts) {
+    this.emit('throw', hand.x, hand.y, (tx - hand.x) / T, (ty - hand.y) / T - 0.5 * G_PX * T, opts);
+  }
+
+  cityTarget() {
+    return Phaser.Utils.Array.GetRandom(this.cityTargets);
+  }
+
   release(side, glider) {
     const hand = this.handWorld(side);
-    const atPlayer = !glider.busy && this.cityTargets.length && Math.random() < 0.6;
-    let tx;
-    let ty;
-    let T;
-    if (atPlayer || !this.cityTargets.length) {
-      const d = Phaser.Math.Distance.Between(hand.x, hand.y, glider.x, glider.y);
-      T = Phaser.Math.Clamp(d / 520, 0.55, 1.25);
-      tx = glider.x + glider.vx * T * 0.5;
-      ty = glider.y + glider.vy * T * 0.3;
+    const R = Phaser.Math.FloatBetween;
+    const canAim = !glider.busy || !this.cityTargets.length;
+    const d = Phaser.Math.Distance.Between(hand.x, hand.y, glider.x, glider.y);
+    if (this.stage === 0) {
+      // smug: one slow, well-aimed throw
+      if (canAim) {
+        const T = Phaser.Math.Clamp(d / 420, 0.75, 1.4);
+        this.lob(hand, glider.x + glider.vx * T * 0.5, glider.y + glider.vy * T * 0.3, T);
+      } else {
+        const c = this.cityTarget();
+        this.lob(hand, c.x, c.y, R(1.4, 1.8));
+      }
+    } else if (this.stage === 1) {
+      // sloppy: a lobbed goo bomb that bursts mid-flight over you or the city
+      const overGlider = canAim && Math.random() < 0.65;
+      const c = overGlider ? null : this.cityTarget();
+      const T = overGlider ? R(1.3, 1.6) : R(1.5, 1.8);
+      const tx = overGlider ? glider.x + glider.vx * T * 0.4 : c.x;
+      const ty = overGlider ? glider.y - 90 : c.y;
+      this.lob(hand, tx, ty, T, { burst: { after: T * (overGlider ? 0.6 : 0.55), n: SPLASH.n, spread: SPLASH.spread } });
+    } else if (this.stage === 2) {
+      // desperate: fast, wild throws (often two)
+      const n = Math.random() < 0.4 ? 2 : 1;
+      for (let k = 0; k < n; k++) {
+        if (canAim && Math.random() < 0.75) {
+          const T = Phaser.Math.Clamp(d / 650, 0.45, 1);
+          this.lob(hand, glider.x + R(-70, 70), glider.y + R(-40, 40), T);
+        } else {
+          const c = this.cityTarget();
+          this.lob(hand, c.x + R(-40, 40), c.y, R(1.1, 1.5));
+        }
+      }
     } else {
-      const target = Phaser.Utils.Array.GetRandom(this.cityTargets);
-      tx = target.x;
-      ty = target.y;
-      T = Phaser.Math.FloatBetween(1.4, 1.8);
+      // feeble: a slow lob that droops short
+      if (canAim && Math.random() < 0.5) this.lob(hand, glider.x + R(-30, 30), glider.y + 60, R(1.8, 2.3));
+      else {
+        const c = this.cityTarget();
+        this.lob(hand, c.x, c.y, R(2, 2.4));
+      }
     }
-    const volley = this.stage >= 2 && Math.random() < 0.35 ? 3 : 1;
-    for (let k = 0; k < volley; k++) {
-      const spread = (k - (volley - 1) / 2) * 70;
-      const vx = (tx + spread - hand.x) / T;
-      const vy = (ty - hand.y) / T - 0.5 * G_PX * T;
-      this.emit('throw', hand.x, hand.y, vx, vy);
+  }
+
+  // ARM OFF! close-range answer to your short-range beans: a sweep that sprays goo at you.
+  swat(glider) {
+    const arm = this.rig.armR;
+    const tweens = this.scene.tweens;
+    this.throwing = true;
+    arm.busy = true;
+    this.swatCd = SWAT_COOLDOWN;
+    this.throwT = Math.max(this.throwT, 0.6);
+    Sfx.swat();
+    let sprayed = false;
+    tweens.add({
+      targets: arm,
+      rotation: -2.3,
+      duration: 150,
+      ease: 'Quad.easeOut',
+      onComplete: () =>
+        tweens.add({
+          targets: arm,
+          rotation: 0.9,
+          duration: 170,
+          ease: 'Quad.easeIn',
+          onUpdate: (tw) => {
+            if (!sprayed && tw.progress > 0.45 && !this.dead) {
+              sprayed = true;
+              this.swatSpray(glider);
+            }
+          },
+          onComplete: () =>
+            tweens.add({
+              targets: arm,
+              rotation: -this.pose.armRest,
+              duration: 300,
+              ease: 'Back.easeOut',
+              onComplete: () => {
+                arm.busy = false;
+                this.throwing = false;
+              },
+            }),
+        }),
+    });
+  }
+
+  swatSpray(glider) {
+    const hand = this.handWorld('R');
+    const base = Math.atan2(glider.y - hand.y, glider.x - hand.x);
+    for (let k = 0; k < 4; k++) {
+      const a = base + (k - 1.5) * 0.3;
+      this.emit('throw', hand.x, hand.y, Math.cos(a) * 520, Math.sin(a) * 520, { life: 0.6 });
     }
+    this.scene.cameras.main.shake(120, 0.005);
   }
 
   hit(x, y) {
@@ -238,14 +391,15 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
     this.fx.mdrip.explode(14, this.x, this.homeY - 150);
     const to = (props, duration = 700, ease = 'Back.easeOut') => sc.tweens.add({ targets: this.pose, ...props, duration, ease });
     if (n === 1) {
-      to({ bodySX: 1.08, bodySY: 0.88, headDrop: 10, headRot: -0.12, armRest: 0.16 });
+      to({ bodySX: 1.08, bodySY: 0.88, headDrop: 10, headRot: -0.12, armRest: 0.16, puddle: PUDDLE[1] });
       r.eyes.setTexture('boss_eyes_droopy');
     } else if (n === 2) {
-      to({ bodySX: 1.12, bodySY: 0.8, headDrop: 18, headRot: -0.22, headX: -8 });
+      to({ bodySX: 1.12, bodySY: 0.8, headDrop: 18, headRot: -0.22, headX: -8, puddle: PUDDLE[2] });
+      r.eyes.setTexture('boss_eyes_angry'); // angry again — and scared (trembling, sweating)
       r.mouth.setTexture('boss_mouth_wobble');
       this.dropArm();
     } else if (n === 3) {
-      to({ bodySX: 1.24, bodySY: 0.62, headDrop: 26, headRot: -0.34, headX: -16, legSY: 0.35, puddle: 1 });
+      to({ bodySX: 1.24, bodySY: 0.62, headDrop: 26, headRot: -0.34, headX: -16, legSY: 0.35, puddle: PUDDLE[3] });
       r.eyes.setTexture('boss_eyes_dizzy');
     } else if (n === 4) {
       this.meltAway();
@@ -276,10 +430,19 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
       collisionFilter: { category: 0, mask: 0 },
     });
     debris.setScale(this.scale).setRotation(th).setDepth(DEPTH.bossCloud + 1);
-    debris.setVelocity(-2.4, -4.5);
-    debris.setAngularVelocity(-0.07);
+    debris.setVelocity(-4.2, -6.5); // flung up and away
+    debris.setAngularVelocity(-0.16);
     this.debris = debris;
+    // goo bursts from the shoulder as it tears free
+    const sx = root.x + this.scale * arm.x;
+    const sy = root.y + this.scale * arm.y;
+    this.fx.gob.explode(16, sx, sy);
+    this.fx.mdrip.explode(14, sx, sy);
+    this.fx.puff.explode(8, sx, sy);
+    this.scene.cameras.main.shake(380, 0.016);
+    this.recoil = 1;
     Sfx.slough();
+    Sfx.burst();
   }
 
   meltAway() {

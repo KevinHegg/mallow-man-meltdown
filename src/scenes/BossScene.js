@@ -24,6 +24,8 @@ export class BossScene extends Phaser.Scene {
     if (!data.retry) this.registry.set('bossCheckpoint', snapshot(this.run));
     this.trash = [];
     this.ended = false;
+    this.bombs = []; // SAGGING splash bombs waiting to burst
+    this.swatGlobs = []; // ARM OFF! short-range swat spray
 
     drawSky(this, [0xff9ec9, 0xffc7e0, 0xffe6d6, 0xcdeeff]);
     const sun = this.add.circle(W - 90, 150, 56, 0xfff1a8).setDepth(DEPTH.far);
@@ -56,7 +58,7 @@ export class BossScene extends Phaser.Scene {
 
     this.glider.on('tier', (tier, prev) => this.onTier(tier, prev));
     this.glider.on('crashed', () => this.lose('spiral'));
-    this.boss.on('throw', (x, y, vx, vy) => this.goo.spawn(x, y, vx, vy));
+    this.boss.on('throw', (x, y, vx, vy, opts) => this.spawnBossGoo(x, y, vx, vy, opts));
     this.boss.on('stage', (n, name) => {
       if (n < 4) this.hud.banner(name, '', 1100);
     });
@@ -89,6 +91,7 @@ export class BossScene extends Phaser.Scene {
     this.boss.update(dt, this.glider);
     this.beans.update(dt);
     this.goo.update(dt);
+    this.updateBossGoo(dt);
     this.city.update(dt);
     this.hud.update();
 
@@ -103,6 +106,65 @@ export class BossScene extends Phaser.Scene {
     this.run.boosts = gl.boosts;
     this.run.shakes = gl.shakes;
     this.run.frost = this.city.frost.slice();
+  }
+
+  // Every boss attack is an ordinary goo-mallow (same goo amount per hit); only how it flies differs.
+  spawnBossGoo(x, y, vx, vy, opts) {
+    const m = this.goo.spawn(x, y, vx, vy);
+    if (opts?.burst) {
+      m.burstIn = opts.burst.after;
+      m.burst = opts.burst;
+      this.bombs.push(m);
+    } else if (opts?.life) {
+      m.lifeLeft = opts.life;
+      m.setTexture('splat').setScale(0.75);
+      this.swatGlobs.push(m);
+    }
+  }
+
+  updateBossGoo(dt) {
+    for (let i = this.bombs.length - 1; i >= 0; i--) {
+      const m = this.bombs[i];
+      if (!m.alive) {
+        this.bombs.splice(i, 1);
+        continue;
+      }
+      m.burstIn -= dt;
+      m.setTint(m.burstIn < 0.4 && Math.floor(m.burstIn * 20) % 2 ? 0xd4ff9e : 0xffffff); // fizzing telegraph
+      if (m.burstIn <= 0) {
+        this.bombs.splice(i, 1);
+        this.burstBomb(m);
+      }
+    }
+    for (let i = this.swatGlobs.length - 1; i >= 0; i--) {
+      const m = this.swatGlobs[i];
+      if (!m.alive) {
+        this.swatGlobs.splice(i, 1);
+        continue;
+      }
+      m.lifeLeft -= dt;
+      if (m.lifeLeft <= 0) {
+        this.swatGlobs.splice(i, 1);
+        this.fx.drip.explode(3, m.x, m.y);
+        this.goo.kill(m); // swat spray is close-range only
+      }
+    }
+  }
+
+  // SAGGING splash arc: the bomb bursts into a fan of splatter that widens as it falls.
+  burstBomb(m) {
+    const { n, spread } = m.burst;
+    const vx = m.body.velocity.x * 60;
+    const vy = m.body.velocity.y * 60;
+    const { x, y } = m;
+    this.goo.kill(m);
+    for (let k = 0; k < n; k++) {
+      const f = this.goo.spawn(x, y, vx + (k - (n - 1) / 2) * spread, vy - 30 + rand(-20, 20));
+      f.setTexture('splat').setScale(0.8);
+    }
+    this.fx.gob.explode(6, x, y);
+    this.fx.puff.explode(4, x, y);
+    Sfx.burst();
   }
 
   fire() {
