@@ -8,6 +8,8 @@ a giant perched atop a cloud, hurling goo-filled marshmallows at you and the
 city. Melt him with jelly beans before his goo cakes your wings or his frost
 covers the city. Nothing dies; the finale is dessert.
 
+**▶ Play it:** https://kevinhegg.github.io/mallow-man-meltdown/ (best on a phone, held upright)
+
 - `DESIGN.md` — the full game design (mechanics, boss stages, win/lose)
 - `claude-code-scaffold-prompt.md` — the prompt this playable scaffold was built from
 
@@ -80,6 +82,8 @@ src/
 
 Gameplay is strictly 2D on the screen plane. Depth is only decorative: in Flight, a tiny projector (`screen = horizon + (x, y) / z * focal`) draws the valley and scales goo, beans and props by depth, while collisions stay in screen space. Most balance lives in `TUNE` in `src/config.js`.
 
-## Deploy (Netlify free tier)
+## Deploy
 
-`netlify.toml` is included (build `npm run build`, publish `dist`, Node 22). Connect the repo in Netlify, or drag the `dist/` folder onto app.netlify.com/drop.
+**GitHub Pages (live):** `.github/workflows/deploy-pages.yml` builds and publishes to https://kevinhegg.github.io/mallow-man-meltdown/ on every push to `main`.
+
+**Netlify (alternative, free tier):** `netlify.toml` is included (build `npm run build`, publish `dist`, Node 22). Connect the repo in Netlify, or drag the `dist/` folder onto app.netlify.com/drop.
