@@ -536,30 +536,95 @@ export function buildTextures(scene) {
   arch('arch1', PAL.licorice, PAL.licoriceDark); // licorice
 
   // ---------- Evil Marshmallow Man parts ----------
-  make('boss_body', 180, 164, (g) => {
-    blob(g, [{ rr: [6, 6, 168, 148, 44] }], PAL.mallow, PAL.mallowLine, 3);
+  // He is built from individual marshmallows glued together with frosting mortar. Texture sizes
+  // match the rig (origins, shoulders, hand reach), so only the art changes.
+  const FROST = 0xfff0f7;
+  const FROST_EDGE = 0xeab0c9;
+  const FROST_PINK = 0xffc6dc;
+  const FROST_PINK_EDGE = 0xe98fb3;
+
+  // One marshmallow: a squashed cylinder with a lighter top face, soft side/base shading and powder.
+  const lump = (g, x, y, w, h, r = Math.min(w, h) * 0.32) => {
+    blob(g, [{ rr: [x, y, w, h, r] }], PAL.mallow, PAL.mallowLine, 2.5);
     g.fillStyle(PAL.mallowShade, 1);
-    g.fillRoundedRect(122, 18, 40, 122, 20);
+    g.fillRoundedRect(x + w * 0.7, y + h * 0.22, w * 0.22, h * 0.62, Math.min(w * 0.11, h * 0.31));
+    g.fillStyle(PAL.mallowShade, 0.7);
+    g.fillRoundedRect(x + w * 0.12, y + h * 0.78, w * 0.76, h * 0.14, h * 0.07);
     g.fillStyle(0xffffff, 1);
-    g.fillRoundedRect(22, 20, 22, 66, 11);
-    g.lineStyle(6, PAL.mallowPink, 1);
+    g.fillEllipse(x + w * 0.5, y + h * 0.2, w * 0.78, h * 0.24);
+    g.lineStyle(1.5, PAL.mallowLine, 0.6);
+    g.strokeEllipse(x + w * 0.5, y + h * 0.2, w * 0.78, h * 0.24);
+    g.fillStyle(PAL.mallowLine, 0.45);
+    for (let k = 0; k < 4; k++) g.fillCircle(x + rng.realInRange(0.2, 0.7) * w, y + rng.realInRange(0.38, 0.72) * h, rng.realInRange(0.8, 1.4));
+  };
+  // Piped frosting: overlapping glossy beads ([x, y, r] each) drawn as one seamless line.
+  const frost = (g, beadsList, fill = FROST, edge = FROST_EDGE) => {
+    g.fillStyle(edge, 1);
+    for (const [x, y, r] of beadsList) g.fillCircle(x, y, r + 2);
+    g.fillStyle(fill, 1);
+    for (const [x, y, r] of beadsList) g.fillCircle(x, y, r);
+    g.fillStyle(0xffffff, 0.9);
+    for (const [x, y, r] of beadsList) g.fillCircle(x - r * 0.3, y - r * 0.35, Math.max(1, r * 0.32));
+  };
+  const beads = (x0, y0, x1, y1, r, step) => {
+    const n = Math.max(2, Math.round(Math.hypot(x1 - x0, y1 - y0) / step));
+    const out = [];
+    for (let i = 0; i <= n; i++) out.push([x0 + ((x1 - x0) * i) / n, y0 + ((y1 - y0) * i) / n, r * rng.realInRange(0.85, 1.15)]);
+    return out;
+  };
+  const frostDrip = (g, x, y, len, w = 6) => {
+    blob(g, [{ rr: [x - w / 2, y, w, len, w / 2] }, { c: [x, y + len, w * 0.7] }], FROST, FROST_EDGE, 2);
+    g.fillStyle(0xffffff, 0.85);
+    g.fillCircle(x - w * 0.2, y + len - w * 0.15, Math.max(1, w * 0.22));
+  };
+  // Piped rosette where the torso seams meet (replaces the old flat belly swirl).
+  const rosette = (g, x, y, R) => {
+    const ring = [];
+    for (let k = 0; k < 9; k++) {
+      const a = (k / 9) * Math.PI * 2;
+      ring.push([x + Math.cos(a) * R * 0.62, y + Math.sin(a) * R * 0.62, R * 0.38]);
+    }
+    ring.push([x, y, R * 0.45]);
+    frost(g, ring, FROST_PINK, FROST_PINK_EDGE);
+    g.lineStyle(2, FROST_PINK_EDGE, 0.85);
     g.beginPath();
-    g.arc(90, 92, 24, Math.PI * 0.2, Math.PI * 1.9);
+    g.arc(x, y, R * 0.28, 0, Math.PI * 1.6);
     g.strokePath();
-    g.lineStyle(5, PAL.mallowPink, 1);
-    g.beginPath();
-    g.arc(90, 92, 11, Math.PI * 1.2, Math.PI * 2.6);
-    g.strokePath();
-    g.fillStyle(PAL.toast, 0.35);
-    g.fillCircle(40, 128, 5);
-    g.fillCircle(140, 40, 4);
-    g.fillCircle(56, 40, 3);
+  };
+
+  make('boss_body', 180, 164, (g) => {
+    // four big marshmallows glued into a torso; the silhouette stays a rounded block
+    lump(g, 92, 14, 80, 68);
+    lump(g, 8, 10, 84, 72);
+    lump(g, 90, 82, 82, 72);
+    lump(g, 10, 80, 82, 74);
+    // drips first, so the piped seams cover their tops
+    frostDrip(g, 64, 14, 14, 7);
+    frostDrip(g, 116, 14, 9, 6);
+    frostDrip(g, 16, 44, 12, 6);
+    frostDrip(g, 165, 44, 9, 6);
+    frostDrip(g, 96, 88, 12, 6);
+    frostDrip(g, 46, 154, 4, 6);
+    frostDrip(g, 132, 154, 4, 5);
+    // mortar: seams between the lumps, neck collar, shoulders (arms glue on here), waist band
+    frost(g, beads(91, 18, 91, 148, 6, 11));
+    frost(g, beads(16, 80, 166, 82, 6, 11));
+    frost(g, beads(40, 11, 140, 11, 8, 12));
+    frost(g, [[12, 30, 9], [20, 40, 8], [10, 45, 6]]);
+    frost(g, [[168, 30, 9], [160, 40, 8], [170, 45, 6]]);
+    frost(g, beads(20, 153, 160, 153, 5, 10));
+    rosette(g, 91, 81, 17);
   });
 
   make('boss_head', 144, 124, (g) => {
+    // one big marshmallow with a toasted top
     blob(g, [{ rr: [8, 22, 128, 94, 30] }], PAL.mallow, PAL.mallowLine, 3);
     g.fillStyle(PAL.mallowShade, 1);
     g.fillRoundedRect(106, 40, 24, 66, 12);
+    g.fillStyle(PAL.mallowShade, 0.7);
+    g.fillRoundedRect(20, 100, 104, 12, 6);
+    g.fillStyle(PAL.mallowLine, 0.45);
+    for (let k = 0; k < 6; k++) g.fillCircle(rng.between(22, 122), rng.between(48, 100), rng.realInRange(0.8, 1.5));
     g.fillStyle(0xfff3e4, 1);
     g.fillEllipse(72, 26, 128, 34);
     g.fillStyle(PAL.toast, 1);
@@ -569,6 +634,9 @@ export function buildTextures(scene) {
     g.fillStyle(PAL.toastDark, 0.7);
     g.fillEllipse(58, 21, 46, 10);
     g.fillCircle(96, 26, 4);
+    // a smear of frosting on his temple
+    frostDrip(g, 16, 56, 9, 5);
+    frost(g, [[20, 50, 6], [27, 46, 5], [15, 57, 4]]);
   });
 
   make('boss_eyes_angry', 110, 48, (g) => {
@@ -630,15 +698,43 @@ export function buildTextures(scene) {
   });
 
   make('boss_arm', 56, 124, (g) => {
-    blob(g, [{ rr: [8, 4, 40, 98, 20] }, { c: [28, 102, 19] }, { c: [11, 96, 8] }], PAL.mallow, PAL.mallowLine, 3);
+    // torn frosting at the shoulder end (hidden behind his body until the arm comes off)
+    frost(g, [[20, 7, 6], [28, 5, 7], [36, 7, 6]]);
+    lump(g, 9, 4, 38, 42); // upper arm
+    lump(g, 11, 48, 34, 38); // forearm
+    blob(g, [{ c: [28, 103, 18] }, { c: [12, 96, 7.5] }], PAL.mallow, PAL.mallowLine, 2.5); // mitten hand
     g.fillStyle(PAL.mallowShade, 1);
-    g.fillRoundedRect(34, 14, 9, 72, 4);
+    g.fillEllipse(36, 108, 14, 18);
+    g.fillStyle(0xffffff, 1);
+    g.fillEllipse(23, 96, 12, 7);
+    // elbow and wrist mortar
+    frostDrip(g, 40, 49, 8, 6);
+    frostDrip(g, 17, 89, 7, 5);
+    frost(g, beads(10, 47, 46, 47, 5, 8));
+    frost(g, beads(12, 87, 44, 87, 4.5, 8));
   });
 
   make('boss_leg', 60, 66, (g) => {
-    blob(g, [{ rr: [8, 4, 44, 56, 18] }], PAL.mallow, PAL.mallowLine, 3);
-    g.fillStyle(PAL.mallowShade, 1);
-    g.fillRoundedRect(38, 12, 9, 40, 4);
+    lump(g, 9, 3, 42, 30); // thigh
+    lump(g, 8, 33, 44, 30); // shin
+    frostDrip(g, 44, 35, 7, 5);
+    frost(g, beads(10, 33, 50, 33, 5, 9)); // knee mortar
+  });
+
+  // ARM OFF! stump: torn marshmallow strands over a frosting joint
+  make('boss_stump', 52, 44, (g) => {
+    const torn = [4, 30, 8, 16, 14, 22, 20, 9, 27, 19, 33, 6, 39, 18, 46, 11, 48, 32];
+    g.fillStyle(PAL.mallowLine, 1);
+    g.fillPoints(pts(torn), true);
+    g.fillStyle(PAL.mallow, 1);
+    g.fillPoints(pts(torn.map((v, i) => (i % 2 ? v + 3 : v + (v < 26 ? 2 : -2)))), true);
+    g.lineStyle(2, PAL.mallow, 1);
+    g.lineBetween(20, 12, 18, 3);
+    g.lineBetween(33, 9, 36, 1);
+    g.lineBetween(45, 14, 50, 8);
+    frostDrip(g, 18, 33, 6, 6);
+    frostDrip(g, 34, 33, 4, 5);
+    frost(g, [[12, 30, 8], [24, 32, 9], [37, 30, 8], [46, 29, 5]]);
   });
 
   make('boss_puddle', 300, 70, (g) => {
@@ -653,5 +749,7 @@ export function buildTextures(scene) {
     g.fillEllipse(150, 40, 60, 10);
     g.fillStyle(0xffffff, 1);
     g.fillEllipse(110, 32, 50, 8);
+    frost(g, [[72, 40, 6], [80, 44, 5], [214, 38, 6], [222, 43, 4]]);
+    frost(g, [[176, 46, 5], [184, 44, 4]], FROST_PINK, FROST_PINK_EDGE);
   });
 }

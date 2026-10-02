@@ -5,4 +5,4 @@
 - [x] prompt3.md — flight feel: banking, climbs/dives, curving valley, arches — DONE
 - [x] prompt4.md — goo you can feel: visible goo tiers, list/wobble, drips, shake cleanse — DONE
 - [x] prompt5.md — the boss fights back: staged attacks and melt drama — DONE
-- [ ] prompt6.md — boss appearance: marshmallow lumps + frosting mortar re-skin — PENDING
+- [x] prompt6.md — boss appearance: marshmallow lumps + frosting mortar re-skin — DONE

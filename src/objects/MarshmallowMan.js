@@ -54,7 +54,7 @@ export function buildBossRig(scene, x, y, scale) {
   const eyes = scene.add.image(0, -60, 'boss_eyes_angry');
   const mouth = scene.add.image(0, -28, 'boss_mouth_grin');
   headC.add([head, eyes, mouth]);
-  const stump = scene.add.image(-SHOULDER_X + 14, -180, 'msplat').setVisible(false);
+  const stump = scene.add.image(-SHOULDER_X + 14, -180, 'boss_stump').setScale(1.25).setVisible(false);
   root.add([legL, legR, armL, armR, body, stump, headC]);
   return { root, legL, legR, armL, armR, body, headC, head, eyes, mouth, stump, parts: [legL, legR, armL, armR, body, head] };
 }
