@@ -44,7 +44,7 @@ export class FlightScene extends Phaser.Scene {
     this.pt = {};
     this.att = { bank: 0, pitch: 0 }; // eased visual attitude of the glider
 
-    drawSky(this, [0xffb8dc, 0xffcfe6, 0xffe6f2, 0xfff0f6]);
+    drawSky(this, [0xf9a8d4, 0xffc8e3, 0xffe3f0, 0xfff1f6]);
     this.city = new City(this, { height: 92, frost: this.run.frost });
     const horizonY = Math.round(H * 0.3);
     const bottom = this.city.top - 46;

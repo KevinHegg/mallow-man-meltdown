@@ -3,11 +3,12 @@
 // fly-under arches, and a centreline that curves gently over distance. All decorative.
 import * as Phaser from 'phaser';
 import { DEPTH } from '../config.js';
-import { mix } from '../art/textures.js';
+import { mix, VALLEY_SHADOW_PAD } from '../art/textures.js';
 
 const BUILDINGS = ['v_tower0', 'v_tower1', 'v_gumhouse0', 'v_gumhouse1', 'v_gumhouse2', 'v_cane'];
 const ARCHES = ['arch0', 'arch1'];
-const HAZE = 0xf3d9f2;
+const HAZE = 0xeadcf6; // distance haze (slightly cool, so far things recede)
+const HAZE_AMOUNT = 0.9;
 const GROUND_FAR = 0xf6dff0;
 const GROUND_NEAR = 0xb8efcf;
 const PATH = 0xffc6df;
@@ -57,6 +58,8 @@ export class Valley {
     }
     this.mtnFar = scene.add.image(W / 2, proj.horizonY + 4, 'mtn_far').setOrigin(0.5, 1).setDepth(DEPTH.horizon);
     this.mtnNear = scene.add.image(W / 2, proj.horizonY + 6, 'mtn_near').setOrigin(0.5, 1).setDepth(DEPTH.horizon + 0.05);
+    // a band of haze on the horizon, in front of only the farthest billboards
+    this.haze = scene.add.image(W / 2, proj.horizonY, 'hazeband').setDisplaySize(W, 120).setDepth(DEPTH.mid + 0.08);
 
     this.groundBase = scene.add.graphics().setDepth(DEPTH.ground);
     this.ground = scene.add.graphics().setDepth(DEPTH.ground);
@@ -103,6 +106,7 @@ export class Valley {
 
   dress(b) {
     b.img.setTexture(Phaser.Utils.Array.GetRandom(BUILDINGS)).setFlipX(b.side > 0);
+    b.img.setOrigin(0.5, 1 - VALLEY_SHADOW_PAD / b.img.height); // base line sits above the baked contact shadow
     b.size = (this.groundY / 300) * Phaser.Math.FloatBetween(0.65, 1.35); // world units per texture px
     const inset = Phaser.Math.FloatBetween(0, 40);
     b.x = b.side * (this.halfWidth + inset + (b.img.width * b.size) / 2);
@@ -142,7 +146,7 @@ export class Valley {
         .setScale(t.s * b.size)
         .setDepth(DEPTH.mid + (1 - far) * 0.9)
         .setAlpha(Phaser.Math.Clamp((1 - far) / 0.12, 0, 1))
-        .setTint(mix(0xffffff, HAZE, far * 0.75));
+        .setTint(mix(0xffffff, HAZE, far * HAZE_AMOUNT));
     }
 
     for (const a of this.arches) {
@@ -160,7 +164,7 @@ export class Valley {
         .setScale(t.s * this.archSX, t.s * this.archSY)
         .setDepth(a.z < f ? DEPTH.glider + 1 : this.depthAt(a.z) + 0.05) // overhead once it passes the glider
         .setAlpha(Phaser.Math.Clamp((1 - far) / 0.12, 0, 1))
-        .setTint(mix(0xffffff, HAZE, Math.max(0, far) * 0.75));
+        .setTint(mix(0xffffff, HAZE, Math.max(0, far) * HAZE_AMOUNT));
     }
 
     // Horizon layers: the far ridge barely moves; the near ridge sways and turns more.
@@ -174,6 +178,7 @@ export class Valley {
     this.mtnFar.setPosition(p.cx - p.camX * 0.02 - f * this.s0 * 0.5, p.horizonY + 4 + p.tilt);
     this.mtnNear.setPosition(p.cx - p.camX * 0.06 - f * this.s0 * 0.65, p.horizonY + 6 + p.tilt);
     this.groundBase.y = p.tilt;
+    this.haze.y = p.horizonY + p.tilt;
     this.drawGround();
   }
 

@@ -41,6 +41,163 @@ function blob(g, shapes, fill, outline = null, ow = 3) {
   drawShapes(g, shapes, 0);
 }
 
+// ---------- Painting helpers: light, gloss, volume (City uses the frosting ones for trim) ----------
+// Everything here is baked into textures (or a baked city strip) once, so none of it costs
+// anything per frame.
+const artRng = new Phaser.Math.RandomDataGenerator(['frosting']);
+export const FROST = 0xfff0f7;
+export const FROST_EDGE = 0xeab0c9;
+export const FROST_PINK = 0xffc6dc;
+export const FROST_PINK_EDGE = 0xe98fb3;
+export const VALLEY_SHADOW_PAD = 14; // valley billboards carry a contact shadow below their base
+const LUMP_DARK = 0xd9b9cd; // the underside a top light never reaches
+const LUMP_SIDE = 0xd6b2c9; // the side turning away from the light
+const AO = 0x9c7090; // ambient occlusion pooling in seams and under things
+const GOO_LIGHT = 0xd6f9b4; // the lit, translucent core of the slime
+const GOO_SHADOW = 0x4fae4c;
+
+// A top-lit marshmallow surface: translucent bands darken it toward the base, the far side turns
+// away from the light, and a specular rim catches the light on the upper-left edge.
+function litBody(g, x, y, w, h, r, ow = 2.5) {
+  blob(g, [{ rr: [x, y, w, h, r] }], PAL.mallow, PAL.mallowLine, ow);
+  const hi = h - r;
+  const lo = r + 1;
+  for (let k = 0; k < 5; k++) {
+    const hh = hi - ((hi - lo) * k) / 4;
+    g.fillStyle(LUMP_DARK, 0.2);
+    g.fillRoundedRect(x + 1, y + h - hh, w - 2, hh - 1, { tl: 0, tr: 0, bl: r - 1, br: r - 1 });
+  }
+  g.fillStyle(LUMP_SIDE, 0.45);
+  g.fillRoundedRect(x + w * 0.76, y + h * 0.2, w * 0.18, h * 0.64, Math.min(w * 0.09, h * 0.32));
+  g.fillStyle(LUMP_SIDE, 0.25);
+  g.fillRoundedRect(x + w * 0.64, y + h * 0.24, w * 0.14, h * 0.58, Math.min(w * 0.07, h * 0.29));
+  g.lineStyle(2, 0xffffff, 0.95);
+  g.beginPath();
+  g.arc(x + r, y + r, Math.max(1, r - 2.5), Math.PI * 1.05, Math.PI * 1.45);
+  g.strokePath();
+}
+
+// One marshmallow: a lit squashed cylinder with a bright top face, a sheen and powdery specks.
+function lump(g, x, y, w, h, r = Math.min(w, h) * 0.32) {
+  litBody(g, x, y, w, h, r);
+  g.fillStyle(0xffffff, 1);
+  g.fillEllipse(x + w * 0.5, y + h * 0.2, w * 0.78, h * 0.24);
+  g.lineStyle(1.5, PAL.mallowLine, 0.55);
+  g.strokeEllipse(x + w * 0.5, y + h * 0.2, w * 0.78, h * 0.24);
+  g.fillStyle(0xffffff, 1);
+  g.fillEllipse(x + w * 0.36, y + h * 0.15, w * 0.24, h * 0.06);
+  g.fillStyle(PAL.mallowLine, 0.45);
+  for (let k = 0; k < 4; k++) g.fillCircle(x + artRng.realInRange(0.2, 0.7) * w, y + artRng.realInRange(0.38, 0.72) * h, artRng.realInRange(0.8, 1.4));
+}
+
+// Ambient occlusion: soft darkness where two pieces meet (drawn under the frosting mortar).
+function aoLine(g, x0, y0, x1, y1, width) {
+  g.lineStyle(width, AO, 0.16);
+  g.lineBetween(x0, y0, x1, y1);
+  g.lineStyle(width * 0.55, AO, 0.18);
+  g.lineBetween(x0, y0, x1, y1);
+}
+function aoDot(g, x, y, r) {
+  g.fillStyle(AO, 0.15);
+  g.fillCircle(x, y, r);
+  g.fillStyle(AO, 0.14);
+  g.fillCircle(x, y, r * 0.65);
+}
+
+// A soft shadow pooled on the ground (stacked translucent ellipses).
+export function contactShadow(g, cx, cy, w, h) {
+  for (let k = 0; k < 4; k++) {
+    g.fillStyle(AO, 0.07);
+    g.fillEllipse(cx, cy, w * (1 - k * 0.16), h * (1 - k * 0.16));
+  }
+}
+
+// Piped frosting: glossy beads [x, y, r] drawn as one seamless line — shaded underside, lit
+// body, a sharp specular and a small glint.
+export function frost(g, list, fill = FROST, edge = FROST_EDGE) {
+  g.fillStyle(edge, 1);
+  for (const [x, y, r] of list) g.fillCircle(x, y + 0.5, r + 2);
+  g.fillStyle(mix(fill, edge, 0.5), 1);
+  for (const [x, y, r] of list) g.fillCircle(x, y, r);
+  g.fillStyle(fill, 1);
+  for (const [x, y, r] of list) g.fillCircle(x - r * 0.12, y - r * 0.14, r * 0.8);
+  g.fillStyle(0xffffff, 1);
+  for (const [x, y, r] of list) g.fillCircle(x - r * 0.32, y - r * 0.36, Math.max(0.8, r * 0.26));
+  g.fillStyle(0xffffff, 0.75);
+  for (const [x, y, r] of list) g.fillCircle(x + r * 0.3, y + r * 0.18, Math.max(0.5, r * 0.1));
+}
+
+export function beads(x0, y0, x1, y1, r, step) {
+  const n = Math.max(2, Math.round(Math.hypot(x1 - x0, y1 - y0) / step));
+  const out = [];
+  for (let i = 0; i <= n; i++) out.push([x0 + ((x1 - x0) * i) / n, y0 + ((y1 - y0) * i) / n, r * artRng.realInRange(0.85, 1.15)]);
+  return out;
+}
+
+export function frostDrip(g, x, y, len, w = 6) {
+  blob(g, [{ rr: [x - w / 2, y, w, len, w / 2] }, { c: [x, y + len, w * 0.7] }], mix(FROST, FROST_EDGE, 0.45), FROST_EDGE, 2);
+  g.fillStyle(FROST, 1);
+  g.fillRoundedRect(x - w / 2 + 0.5, y, w * 0.6, len, Math.min(w * 0.3, len / 2));
+  g.fillCircle(x - w * 0.12, y + len - w * 0.08, w * 0.5);
+  g.fillStyle(0xffffff, 1);
+  g.fillCircle(x - w * 0.22, y + len - w * 0.22, Math.max(1, w * 0.2));
+}
+
+// Piped rosette where the boss's torso seams meet.
+function rosette(g, x, y, R) {
+  const ring = [];
+  for (let k = 0; k < 9; k++) {
+    const a = (k / 9) * Math.PI * 2;
+    ring.push([x + Math.cos(a) * R * 0.62, y + Math.sin(a) * R * 0.62, R * 0.38]);
+  }
+  ring.push([x, y, R * 0.45]);
+  frost(g, ring, FROST_PINK, FROST_PINK_EDGE);
+  g.lineStyle(2, FROST_PINK_EDGE, 0.85);
+  g.beginPath();
+  g.arc(x, y, R * 0.28, 0, Math.PI * 1.6);
+  g.strokePath();
+}
+
+// Wet slime: deep outline, a shadowed lower edge, a lit translucent core, sharp specular glints
+// and a tiny trapped bubble. `main` picks the lobe that gets the big highlight.
+function wetGoo(g, shapes, main = 0) {
+  blob(g, shapes, PAL.goo, PAL.gooDeep, 2);
+  g.fillStyle(GOO_SHADOW, 0.35);
+  for (const s of shapes) {
+    if (s.c) g.fillCircle(s.c[0], s.c[1] + s.c[2] * 0.22, s.c[2] * 0.75);
+    else if (s.e) g.fillEllipse(s.e[0], s.e[1] + s.e[3] * 0.18, s.e[2] * 0.85, s.e[3] * 0.6);
+  }
+  g.fillStyle(GOO_LIGHT, 0.85);
+  for (const s of shapes) {
+    if (s.c) g.fillCircle(s.c[0] - s.c[2] * 0.12, s.c[1] - s.c[2] * 0.14, s.c[2] * 0.52);
+    else if (s.e) g.fillEllipse(s.e[0] - s.e[2] * 0.06, s.e[1] - s.e[3] * 0.12, s.e[2] * 0.6, s.e[3] * 0.45);
+  }
+  const m = shapes[main];
+  const [mx, my, mr] = m.c ? m.c : [m.e[0], m.e[1], Math.min(m.e[2], m.e[3]) / 2];
+  g.fillStyle(0xffffff, 1);
+  g.fillEllipse(mx - mr * 0.38, my - mr * 0.42, mr * 0.75, mr * 0.3);
+  g.fillCircle(mx + mr * 0.32, my - mr * 0.5, Math.max(1, mr * 0.12));
+  g.fillStyle(0xffffff, 0.9);
+  for (const s of shapes) if (s.c && s !== m && s.c[2] >= 5) g.fillCircle(s.c[0] - s.c[2] * 0.35, s.c[1] - s.c[2] * 0.4, Math.max(0.8, s.c[2] * 0.2));
+  const br = Math.max(1, mr * 0.12);
+  g.fillStyle(GOO_LIGHT, 1);
+  g.fillCircle(mx + mr * 0.25, my + mr * 0.2, br);
+  g.lineStyle(1, PAL.gooDeep, 0.6);
+  g.strokeCircle(mx + mr * 0.25, my + mr * 0.2, br);
+}
+
+// Volumetric cloud: shaded underside, body in shadow, lit tops and sunlit crowns.
+function cloudPuffs(g, circles, dy = 0) {
+  g.fillStyle(0xcab3de, 1);
+  for (const [x, y, r] of circles) g.fillCircle(x, y + dy + r * 0.18, r);
+  g.fillStyle(0xe6dbf3, 1);
+  for (const [x, y, r] of circles) g.fillCircle(x, y + dy + r * 0.06, r * 0.97);
+  g.fillStyle(0xfcf9ff, 1);
+  for (const [x, y, r] of circles) g.fillCircle(x - r * 0.05, y + dy - r * 0.07, r * 0.86);
+  g.fillStyle(0xffffff, 1);
+  for (const [x, y, r] of circles) g.fillCircle(x - r * 0.24, y + dy - r * 0.28, r * 0.42);
+}
+
 export function buildTextures(scene) {
   const make = (key, w, h, draw) => {
     if (scene.textures.exists(key)) return;
@@ -99,25 +256,17 @@ export function buildTextures(scene) {
 
   // ---------- Goo-filled marshmallow projectile ----------
   make('goomallow', 48, 52, (g) => {
-    blob(g, [{ rr: [6, 14, 36, 32, 10] }], PAL.mallow, PAL.mallowLine, 2.5);
+    litBody(g, 6, 14, 36, 32, 10);
     g.fillStyle(0xffffff, 1);
     g.fillEllipse(24, 16, 34, 12);
-    blob(
-      g,
-      [
-        { e: [24, 12, 30, 12] },
-        { rr: [9, 12, 7, 18, 3.5] },
-        { c: [12.5, 30, 4.5] },
-        { rr: [33, 12, 6, 22, 3] },
-        { c: [36, 34, 4] },
-        { rr: [21, 12, 6, 9, 3] },
-      ],
-      PAL.goo,
-      PAL.gooDeep,
-      2,
-    );
-    g.fillStyle(0xffffff, 0.85);
-    g.fillEllipse(19, 10, 9, 3);
+    wetGoo(g, [
+      { e: [24, 12, 30, 12] },
+      { rr: [9, 12, 7, 18, 3.5] },
+      { c: [12.5, 30, 4.5] },
+      { rr: [33, 12, 6, 22, 3] },
+      { c: [36, 34, 4] },
+      { rr: [21, 12, 6, 9, 3] },
+    ]);
     // grumpy mini face
     g.fillStyle(PAL.ink, 1);
     g.fillCircle(18, 34, 2.6);
@@ -132,25 +281,16 @@ export function buildTextures(scene) {
 
   // ---------- Goo splat (sticks to the glider) ----------
   make('splat', 52, 40, (g) => {
-    blob(
-      g,
-      [
-        { c: [26, 19, 13] },
-        { c: [14, 16, 8] },
-        { c: [38, 15, 9] },
-        { c: [18, 27, 7] },
-        { c: [35, 26, 8] },
-        { c: [7, 22, 4] },
-        { c: [45, 24, 4] },
-        { c: [26, 31, 5] },
-      ],
-      PAL.goo,
-      PAL.gooDeep,
-      2,
-    );
-    g.fillStyle(0xffffff, 0.85);
-    g.fillEllipse(21, 13, 10, 5);
-    g.fillCircle(36, 12, 2);
+    wetGoo(g, [
+      { c: [26, 19, 13] },
+      { c: [14, 16, 8] },
+      { c: [38, 15, 9] },
+      { c: [18, 27, 7] },
+      { c: [35, 26, 8] },
+      { c: [7, 22, 4] },
+      { c: [45, 24, 4] },
+      { c: [26, 31, 5] },
+    ]);
   });
 
   // melted-marshmallow blob (arm stump)
@@ -168,24 +308,22 @@ export function buildTextures(scene) {
 
   // heavy slime sheet for the CAKED coat (wings and tail)
   make('gcoat', 64, 34, (g) => {
-    blob(
-      g,
-      [{ e: [32, 13, 58, 18] }, { e: [18, 11, 26, 14] }, { e: [46, 12, 28, 16] }, { rr: [12, 14, 6, 14, 3] }, { c: [15, 27, 4] }, { rr: [40, 14, 6, 10, 3] }, { c: [43, 23, 3.5] }],
-      PAL.goo,
-      PAL.gooDeep,
-      2,
-    );
-    g.fillStyle(0xffffff, 0.75);
-    g.fillEllipse(24, 8, 16, 4);
-    g.fillCircle(46, 8, 1.8);
+    wetGoo(g, [{ e: [32, 13, 58, 18] }, { e: [18, 11, 26, 14] }, { e: [46, 12, 28, 16] }, { rr: [12, 14, 6, 14, 3] }, { c: [15, 27, 4] }, { rr: [40, 14, 6, 10, 3] }, { c: [43, 23, 3.5] }]);
+    g.fillStyle(0xffffff, 0.9);
+    g.fillEllipse(44, 9, 10, 3);
   });
 
   make('drip', 12, 16, (g) => {
+    g.fillStyle(PAL.gooDeep, 1);
+    g.fillCircle(6, 10, 5.2);
+    g.fillTriangle(6, 0, 1.2, 9, 10.8, 9);
     g.fillStyle(PAL.goo, 1);
-    g.fillCircle(6, 10, 4.5);
-    g.fillTriangle(6, 1, 1.8, 9, 10.2, 9);
-    g.fillStyle(0xffffff, 0.8);
-    g.fillCircle(4.5, 9, 1.4);
+    g.fillCircle(6, 10, 4.3);
+    g.fillTriangle(6, 1.5, 2, 9, 10, 9);
+    g.fillStyle(GOO_LIGHT, 0.9);
+    g.fillCircle(5.4, 9.4, 2.4);
+    g.fillStyle(0xffffff, 1);
+    g.fillEllipse(4.4, 8.4, 1.8, 3.2);
   });
 
   make('mdrip', 16, 20, (g) => {
@@ -359,31 +497,53 @@ export function buildTextures(scene) {
     }
   });
 
-  make('cloud', 200, 100, (g) => {
-    const circles = [[50, 62, 30], [90, 46, 38], [138, 54, 32], [168, 68, 22], [100, 72, 30], [28, 74, 18]];
-    g.fillStyle(0xf0e2f4, 1);
-    circles.forEach(([x, y, r]) => g.fillCircle(x, y + 6, r));
-    g.fillStyle(0xffffff, 1);
-    circles.forEach(([x, y, r]) => g.fillCircle(x, y, r));
+  make('cloud', 200, 120, (g) => {
+    cloudPuffs(g, [[50, 62, 30], [90, 46, 38], [138, 54, 32], [168, 68, 22], [100, 72, 30], [28, 74, 18]], 10);
+    g.fillStyle(0xffd6ea, 0.35);
+    g.fillEllipse(100, 98, 140, 12);
   });
 
-  make('bosscloud', 440, 170, (g) => {
-    const circles = [
-      [80, 95, 50], [150, 70, 62], [230, 62, 68], [310, 72, 60], [370, 95, 48],
-      [120, 112, 44], [220, 114, 48], [320, 110, 44], [40, 112, 30], [405, 114, 28],
-    ];
-    g.fillStyle(0xe7d6f0, 1);
-    circles.forEach(([x, y, r]) => g.fillCircle(x, y + 10, r));
-    g.fillStyle(0xffffff, 1);
-    circles.forEach(([x, y, r]) => g.fillCircle(x, y, r));
-    g.fillStyle(0xffd6ea, 0.45);
-    g.fillEllipse(220, 136, 300, 26);
+  // The boss's throne: a big volumetric cloud with a pink bounce light and a soft drop shadow.
+  // Padded 15px top and bottom (was 170 tall) so its centre — where the boss stands — is unchanged.
+  make('bosscloud', 440, 200, (g) => {
+    for (let k = 0; k < 5; k++) {
+      g.fillStyle(0x8a6aa8, 0.06);
+      g.fillEllipse(220, 184, 380 - k * 40, 26 - k * 3);
+    }
+    cloudPuffs(
+      g,
+      [
+        [80, 95, 50], [150, 70, 62], [230, 62, 68], [310, 72, 60], [370, 95, 48],
+        [120, 112, 44], [220, 114, 48], [320, 110, 44], [40, 112, 30], [405, 114, 28],
+      ],
+      15,
+    );
+    g.fillStyle(0xffd6ea, 0.4);
+    g.fillEllipse(220, 152, 300, 24);
+  });
+
+  // a warm halo for the boss arena's sun
+  make('sunglow', 260, 260, (g) => {
+    for (let k = 0; k < 8; k++) {
+      g.fillStyle(0xfff1a8, 0.06);
+      g.fillCircle(130, 130, 128 - k * 9);
+    }
+  });
+
+  // atmospheric haze that sits on the valley's horizon
+  make('hazeband', 64, 120, (g, w, h) => {
+    for (let y = 0; y < h; y += 4) {
+      g.fillStyle(0xf4e4f6, 0.42 * Math.sin((Math.PI * (y + 2)) / h));
+      g.fillRect(0, y, w, 4);
+    }
   });
 
   // ---------- Valley (into-the-horizon flight) ----------
   // Building billboards are drawn for the LEFT wall (inner face = right edge) and flipped for the right.
   [0, 1].forEach((v) =>
-    make(`v_tower${v}`, 120, 300, (g, w, h) => {
+    make(`v_tower${v}`, 120, 300 + VALLEY_SHADOW_PAD, (g, w) => {
+      const h = 300; // base line; the pad below holds the contact shadow
+      contactShadow(g, w / 2, h + 3, w * 0.98, 20);
       const s = 36;
       const cols = 3;
       const rows = 7;
@@ -395,11 +555,16 @@ export function buildTextures(scene) {
           blob(g, [{ rr: [x0 + c * s + 1, h - (r + 1) * s + 1, s - 2, s - 2, 6] }], fill, PAL.sugarLine, 2);
           g.fillStyle(0xffffff, 1);
           g.fillRect(x0 + c * s + 6, h - (r + 1) * s + 6, 9, 3);
+          g.fillStyle(PAL.sugarLine, 0.5);
+          g.fillRect(x0 + c * s + 3, h - r * s - 9, s - 6, 6);
         }
       }
       const topY = h - rows * s;
       g.fillStyle(PAL.ink, 0.1);
       g.fillRect(x0 + cols * s - 12, topY, 12, rows * s);
+      // frosting mortar between the sugar-cube courses
+      for (let r = 1; r < rows; r++) frost(g, beads(x0 + 3, h - r * s, x0 + cols * s - 3, h - r * s, 2.6, 7));
+      frost(g, beads(x0 + 4, topY + 1, x0 + cols * s - 4, topY + 1, 3.4, 8));
       if (v === 0) {
         blob(g, [{ e: [w / 2, topY - 2, 52, 40] }], PAL.candy[1], darker(PAL.candy[1]), 2);
         g.fillStyle(0xffffff, 0.8);
@@ -416,23 +581,36 @@ export function buildTextures(scene) {
   );
 
   [PAL.candy[0], PAL.candy[3], PAL.candy[2]].forEach((color, i) =>
-    make(`v_gumhouse${i}`, 130, 230, (g, w, h) => {
+    make(`v_gumhouse${i}`, 130, 230 + VALLEY_SHADOW_PAD, (g, w) => {
+      const h = 230;
+      contactShadow(g, w / 2, h + 3, w * 0.98, 20);
       blob(g, [{ e: [w / 2, 78, 116, 96] }], color, darker(color), 3);
+      g.fillStyle(darker(color, 0.12), 0.6);
+      g.fillEllipse(w / 2 + 14, 92, 80, 40);
       g.fillStyle(lighter(color, 0.55), 0.7);
       g.fillEllipse(44, 52, 26, 14);
       g.fillStyle(0xffffff, 0.85);
       for (let k = 0; k < 12; k++) g.fillCircle(rng.between(24, 106), rng.between(40, 76), rng.realInRange(1, 2));
       blob(g, [{ rr: [10, 80, 110, 148, 8] }], lighter(color, 0.6), darker(color, 0.15), 3);
+      g.fillStyle(darker(color, 0.1), 0.25);
+      g.fillRoundedRect(12, 170, 106, 56, { tl: 0, tr: 0, bl: 7, br: 7 });
       g.fillStyle(0xfff1a8, 1);
       for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) g.fillRoundedRect(22 + c * 32, 96 + r * 30, 18, 18, 4);
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) frost(g, beads(23 + c * 32, 115 + r * 30, 39 + c * 32, 115 + r * 30, 1.8, 5));
       g.fillStyle(darker(color, 0.35), 1);
       g.fillRoundedRect(w / 2 - 12, h - 32, 24, 30, { tl: 12, tr: 12, bl: 0, br: 0 });
       g.fillStyle(PAL.ink, 0.1);
       g.fillRect(104, 82, 14, 144);
+      // frosting where the gumdrop roof sits on the house
+      frostDrip(g, 30, 84, 10, 6);
+      frostDrip(g, 98, 84, 7, 5);
+      frost(g, beads(14, 82, 116, 82, 4, 9));
     }),
   );
 
-  make('v_cane', 90, 330, (g, w, h) => {
+  make('v_cane', 90, 330 + VALLEY_SHADOW_PAD, (g, w) => {
+    const h = 330;
+    contactShadow(g, w / 2, h + 3, 70, 18);
     const cw = 40;
     const x0 = (w - cw) / 2;
     const top = 90;
@@ -454,6 +632,8 @@ export function buildTextures(scene) {
     g.beginPath();
     g.arc(w / 2, top - 44, 10, Math.PI, Math.PI * 2.5);
     g.strokePath();
+    frostDrip(g, x0 + 10, top + 2, 9, 5);
+    frost(g, beads(x0 - 2, top + 1, x0 + cw + 2, top + 1, 4, 8));
   });
 
   // Two horizon layers that drift at different rates; the far ridge carries giant lollipop trees.
@@ -538,66 +718,19 @@ export function buildTextures(scene) {
   // ---------- Evil Marshmallow Man parts ----------
   // He is built from individual marshmallows glued together with frosting mortar. Texture sizes
   // match the rig (origins, shoulders, hand reach), so only the art changes.
-  const FROST = 0xfff0f7;
-  const FROST_EDGE = 0xeab0c9;
-  const FROST_PINK = 0xffc6dc;
-  const FROST_PINK_EDGE = 0xe98fb3;
-
-  // One marshmallow: a squashed cylinder with a lighter top face, soft side/base shading and powder.
-  const lump = (g, x, y, w, h, r = Math.min(w, h) * 0.32) => {
-    blob(g, [{ rr: [x, y, w, h, r] }], PAL.mallow, PAL.mallowLine, 2.5);
-    g.fillStyle(PAL.mallowShade, 1);
-    g.fillRoundedRect(x + w * 0.7, y + h * 0.22, w * 0.22, h * 0.62, Math.min(w * 0.11, h * 0.31));
-    g.fillStyle(PAL.mallowShade, 0.7);
-    g.fillRoundedRect(x + w * 0.12, y + h * 0.78, w * 0.76, h * 0.14, h * 0.07);
-    g.fillStyle(0xffffff, 1);
-    g.fillEllipse(x + w * 0.5, y + h * 0.2, w * 0.78, h * 0.24);
-    g.lineStyle(1.5, PAL.mallowLine, 0.6);
-    g.strokeEllipse(x + w * 0.5, y + h * 0.2, w * 0.78, h * 0.24);
-    g.fillStyle(PAL.mallowLine, 0.45);
-    for (let k = 0; k < 4; k++) g.fillCircle(x + rng.realInRange(0.2, 0.7) * w, y + rng.realInRange(0.38, 0.72) * h, rng.realInRange(0.8, 1.4));
-  };
-  // Piped frosting: overlapping glossy beads ([x, y, r] each) drawn as one seamless line.
-  const frost = (g, beadsList, fill = FROST, edge = FROST_EDGE) => {
-    g.fillStyle(edge, 1);
-    for (const [x, y, r] of beadsList) g.fillCircle(x, y, r + 2);
-    g.fillStyle(fill, 1);
-    for (const [x, y, r] of beadsList) g.fillCircle(x, y, r);
-    g.fillStyle(0xffffff, 0.9);
-    for (const [x, y, r] of beadsList) g.fillCircle(x - r * 0.3, y - r * 0.35, Math.max(1, r * 0.32));
-  };
-  const beads = (x0, y0, x1, y1, r, step) => {
-    const n = Math.max(2, Math.round(Math.hypot(x1 - x0, y1 - y0) / step));
-    const out = [];
-    for (let i = 0; i <= n; i++) out.push([x0 + ((x1 - x0) * i) / n, y0 + ((y1 - y0) * i) / n, r * rng.realInRange(0.85, 1.15)]);
-    return out;
-  };
-  const frostDrip = (g, x, y, len, w = 6) => {
-    blob(g, [{ rr: [x - w / 2, y, w, len, w / 2] }, { c: [x, y + len, w * 0.7] }], FROST, FROST_EDGE, 2);
-    g.fillStyle(0xffffff, 0.85);
-    g.fillCircle(x - w * 0.2, y + len - w * 0.15, Math.max(1, w * 0.22));
-  };
-  // Piped rosette where the torso seams meet (replaces the old flat belly swirl).
-  const rosette = (g, x, y, R) => {
-    const ring = [];
-    for (let k = 0; k < 9; k++) {
-      const a = (k / 9) * Math.PI * 2;
-      ring.push([x + Math.cos(a) * R * 0.62, y + Math.sin(a) * R * 0.62, R * 0.38]);
-    }
-    ring.push([x, y, R * 0.45]);
-    frost(g, ring, FROST_PINK, FROST_PINK_EDGE);
-    g.lineStyle(2, FROST_PINK_EDGE, 0.85);
-    g.beginPath();
-    g.arc(x, y, R * 0.28, 0, Math.PI * 1.6);
-    g.strokePath();
-  };
-
   make('boss_body', 180, 164, (g) => {
     // four big marshmallows glued into a torso; the silhouette stays a rounded block
     lump(g, 92, 14, 80, 68);
     lump(g, 8, 10, 84, 72);
     lump(g, 90, 82, 82, 72);
     lump(g, 10, 80, 82, 74);
+    // ambient occlusion pooling where the marshmallows meet (under the mortar)
+    aoLine(g, 91, 16, 91, 150, 22);
+    aoLine(g, 14, 81, 168, 81, 22);
+    aoLine(g, 36, 13, 144, 13, 18);
+    aoLine(g, 18, 153, 162, 153, 14);
+    aoDot(g, 14, 38, 16);
+    aoDot(g, 166, 38, 16);
     // drips first, so the piped seams cover their tops
     frostDrip(g, 64, 14, 14, 7);
     frostDrip(g, 116, 14, 9, 6);
@@ -618,11 +751,7 @@ export function buildTextures(scene) {
 
   make('boss_head', 144, 124, (g) => {
     // one big marshmallow with a toasted top
-    blob(g, [{ rr: [8, 22, 128, 94, 30] }], PAL.mallow, PAL.mallowLine, 3);
-    g.fillStyle(PAL.mallowShade, 1);
-    g.fillRoundedRect(106, 40, 24, 66, 12);
-    g.fillStyle(PAL.mallowShade, 0.7);
-    g.fillRoundedRect(20, 100, 104, 12, 6);
+    litBody(g, 8, 22, 128, 94, 30, 3);
     g.fillStyle(PAL.mallowLine, 0.45);
     for (let k = 0; k < 6; k++) g.fillCircle(rng.between(22, 122), rng.between(48, 100), rng.realInRange(0.8, 1.5));
     g.fillStyle(0xfff3e4, 1);
@@ -702,6 +831,8 @@ export function buildTextures(scene) {
     frost(g, [[20, 7, 6], [28, 5, 7], [36, 7, 6]]);
     lump(g, 9, 4, 38, 42); // upper arm
     lump(g, 11, 48, 34, 38); // forearm
+    aoLine(g, 10, 47, 46, 47, 12);
+    aoLine(g, 12, 87, 44, 87, 10);
     blob(g, [{ c: [28, 103, 18] }, { c: [12, 96, 7.5] }], PAL.mallow, PAL.mallowLine, 2.5); // mitten hand
     g.fillStyle(PAL.mallowShade, 1);
     g.fillEllipse(36, 108, 14, 18);
@@ -717,6 +848,7 @@ export function buildTextures(scene) {
   make('boss_leg', 60, 66, (g) => {
     lump(g, 9, 3, 42, 30); // thigh
     lump(g, 8, 33, 44, 30); // shin
+    aoLine(g, 10, 33, 50, 33, 12);
     frostDrip(g, 44, 35, 7, 5);
     frost(g, beads(10, 33, 50, 33, 5, 9)); // knee mortar
   });

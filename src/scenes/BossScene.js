@@ -27,7 +27,8 @@ export class BossScene extends Phaser.Scene {
     this.bombs = []; // SAGGING splash bombs waiting to burst
     this.swatGlobs = []; // ARM OFF! short-range swat spray
 
-    drawSky(this, [0xff9ec9, 0xffc7e0, 0xffe6d6, 0xcdeeff]);
+    drawSky(this, [0xf68fc0, 0xffbfdc, 0xffe2d4, 0xc6ebff]);
+    this.add.image(W - 90, 150, 'sunglow').setDepth(DEPTH.far - 0.1);
     const sun = this.add.circle(W - 90, 150, 56, 0xfff1a8).setDepth(DEPTH.far);
     this.tweens.add({ targets: sun, scale: 1.06, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     this.decor = [];

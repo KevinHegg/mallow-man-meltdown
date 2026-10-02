@@ -6,4 +6,4 @@
 - [x] prompt4.md — goo you can feel: visible goo tiers, list/wobble, drips, shake cleanse — DONE
 - [x] prompt5.md — the boss fights back: staged attacks and melt drama — DONE
 - [x] prompt6.md — boss appearance: marshmallow lumps + frosting mortar re-skin — DONE
-- [ ] prompt7.md — paint the world: procedural richness pass toward the poster look — PENDING
+- [x] prompt7.md — paint the world: procedural richness pass toward the poster look — DONE

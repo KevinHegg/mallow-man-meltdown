@@ -2,7 +2,7 @@
 // slowly spread frost to their neighbours. Average frost is the lose meter.
 import * as Phaser from 'phaser';
 import { DEPTH, PAL, TUNE } from '../config.js';
-import { mix } from '../art/textures.js';
+import { beads, contactShadow, frost, frostDrip, mix } from '../art/textures.js';
 
 const KINDS = ['cube', 'gumdrop', 'cake', 'cane', 'lolli', 'cube', 'gumdrop'];
 
@@ -36,9 +36,16 @@ export class City {
       color: PAL.candy[(i * 2 + 1) % PAL.candy.length],
     }));
 
-    this.base = scene.add.graphics().setDepth(DEPTH.city);
+    // The static skyline (buildings, frosting trim, shadows, ground) is baked into one texture:
+    // a Graphics object would replay every bead and window each frame.
+    const key = `city_${W}x${height}`;
+    const g = scene.add.graphics();
+    g.translateCanvas(0, -this.top);
+    this.drawBase(g); // also records each building's top for the frost overlay
+    if (!scene.textures.exists(key)) g.generateTexture(key, W, height);
+    g.destroy();
+    this.base = scene.add.image(0, this.top, key).setOrigin(0, 0).setDepth(DEPTH.city);
     this.ice = scene.add.graphics().setDepth(DEPTH.city + 1);
-    this.drawBase();
     this.drawIce();
   }
 
@@ -50,13 +57,10 @@ export class City {
     return this.buildings.map((b) => ({ x: b.x + b.w / 2, y: this.top + 24 }));
   }
 
-  drawBase() {
-    const g = this.base;
+  drawBase(g) {
     const { W, H, groundY } = this;
-    g.clear();
     g.fillStyle(0xffffff, 0.22);
     g.fillRect(0, this.top, W, this.height);
-    for (const b of this.buildings) this.drawBuilding(g, b);
     g.fillStyle(0xffb3d1, 1);
     g.fillRect(0, groundY, W, this.groundH);
     g.fillStyle(0xffffff, 0.8);
@@ -65,6 +69,8 @@ export class City {
     }
     g.fillStyle(PAL.ink, 0.2);
     g.fillRect(0, groundY, W, 3);
+    for (const b of this.buildings) contactShadow(g, b.x + b.w / 2, groundY + 2, b.w * 1.25, 12);
+    for (const b of this.buildings) this.drawBuilding(g, b);
   }
 
   drawBuilding(g, b) {
@@ -75,11 +81,21 @@ export class City {
     let top = base - b.h;
     const windows = (x0, w0, y0, y1) => {
       const ws = Math.max(5, w0 * 0.2);
-      g.fillStyle(0xfff1a8, 1);
       for (let wy = y0 + ws; wy < y1 - ws; wy += ws * 2) {
-        g.fillRoundedRect(x0 + w0 * 0.2, wy, ws, ws, 2);
-        g.fillRoundedRect(x0 + w0 * 0.8 - ws, wy, ws, ws, 2);
+        for (const wx of [x0 + w0 * 0.2, x0 + w0 * 0.8 - ws]) {
+          g.fillStyle(0xfff1a8, 1);
+          g.fillRoundedRect(wx, wy, ws, ws, 2);
+          g.fillStyle(0xffffff, 0.8);
+          g.fillRect(wx + 1.5, wy + 1.5, ws * 0.3, ws * 0.3);
+          frost(g, beads(wx - 0.5, wy + ws + 1, wx + ws + 0.5, wy + ws + 1, Math.max(1.1, ws * 0.12), ws * 0.4));
+        }
       }
+    };
+    const shadeFacade = (x0, w0, y0, y1) => {
+      g.fillStyle(dark, 0.12);
+      g.fillRect(x0, y1 - (y1 - y0) * 0.3, w0, (y1 - y0) * 0.3);
+      g.fillStyle(dark, 0.1);
+      g.fillRect(x0 + w0 * 0.82, y0, w0 * 0.18, y1 - y0);
     };
 
     switch (b.kind) {
@@ -95,8 +111,14 @@ export class City {
             g.fillRoundedRect(x + c * cs + 1.5, top + r * cs + 1.5, cs - 3, cs - 3, 4);
           }
         }
+        shadeFacade(x, w, top, base);
+        for (let r = 1; r < rows; r++) frost(g, beads(x + 2, top + r * cs, x + w - 2, top + r * cs, cs * 0.08, cs * 0.28));
+        frost(g, beads(x + w / 2, top + 3, x + w / 2, base - 3, cs * 0.07, cs * 0.3));
+        frost(g, [[x + w / 2 - cs * 0.24, top + 1, cs * 0.11], [x + w / 2 + cs * 0.24, top + 1, cs * 0.11], [x + w / 2, top - 1, cs * 0.16]]);
         g.fillStyle(0xe8213d, 1);
         g.fillCircle(x + w / 2, top - b.capH * 0.32, b.capH * 0.3);
+        g.fillStyle(0xffffff, 0.75);
+        g.fillCircle(x + w / 2 - b.capH * 0.1, top - b.capH * 0.42, b.capH * 0.08);
         g.lineStyle(2, 0x3f8f3a, 1);
         g.lineBetween(x + w / 2, top - b.capH * 0.6, x + w / 2 + 6, top - b.capH * 0.9);
         break;
@@ -109,7 +131,10 @@ export class City {
         g.fillCircle(x + w * 0.62, top - b.capH * 0.6, 1.6);
         g.fillStyle(light, 1);
         g.fillRect(x, top, w, b.h);
+        shadeFacade(x, w, top, base);
         windows(x, w, top, base);
+        frostDrip(g, x + w * 0.28, top + 1, Math.max(4, w * 0.12), Math.max(4, w * 0.08));
+        frost(g, beads(x + 1, top, x + w - 1, top, Math.max(2, w * 0.055), w * 0.11));
         break;
       }
       case 'cake': {
@@ -120,8 +145,10 @@ export class City {
           const ty = base - (k + 1) * th;
           g.fillStyle(k % 2 ? 0xffe9c7 : light, 1);
           g.fillRect(x + inset, ty, w - inset * 2, th);
-          g.fillStyle(0xffffff, 1);
-          for (let dx = x + inset; dx < x + w - inset; dx += 8) g.fillCircle(dx + 4, ty + 2, 4);
+          g.fillStyle(dark, 0.1);
+          g.fillRect(x + inset, ty + th * 0.6, w - inset * 2, th * 0.4);
+          if (k === 1) frostDrip(g, x + inset + (w - inset * 2) * 0.7, ty + 2, th * 0.35, Math.max(4, w * 0.07));
+          frost(g, beads(x + inset + 2, ty + 2, x + w - inset - 2, ty + 2, Math.max(2, w * 0.05), w * 0.1));
         }
         top = base - b.h;
         g.fillStyle(0xfff1a8, 1);
@@ -141,10 +168,14 @@ export class City {
           const y1 = Math.min(base, y + 7);
           if (y1 > y0) g.fillRect(cx, y0, cw, y1 - y0);
         }
+        g.fillStyle(dark, 0.1);
+        g.fillRect(cx + cw * 0.75, top, cw * 0.25, b.h);
         g.lineStyle(cw * 0.5, 0xe8213d, 1);
         g.beginPath();
         g.arc(cx + cw * 0.75 + cw * 0.25, top, cw * 0.5, Math.PI, Math.PI * 1.9);
         g.strokePath();
+        frostDrip(g, cx + cw * 0.3, top + 3, Math.max(4, cw * 0.18), Math.max(4, cw * 0.12));
+        frost(g, beads(cx - 1, top + 3, cx + cw + 1, top + 3, Math.max(2, cw * 0.09), cw * 0.2));
         break;
       }
       case 'lolli': {
@@ -156,9 +187,14 @@ export class City {
         g.beginPath();
         g.arc(x + w / 2, top - b.capH * 0.6, b.capH * 0.24, 0, Math.PI * 1.5);
         g.strokePath();
+        g.fillStyle(0xffffff, 0.7);
+        g.fillCircle(x + w / 2 - b.capH * 0.16, top - b.capH * 0.74, b.capH * 0.08);
         g.fillStyle(light, 1);
         g.fillRect(x, top, w, b.h);
+        shadeFacade(x, w, top, base);
         windows(x, w, top, base);
+        frostDrip(g, x + w * 0.72, top + 1, Math.max(4, w * 0.1), Math.max(4, w * 0.08));
+        frost(g, beads(x + 1, top, x + w - 1, top, Math.max(2, w * 0.055), w * 0.11));
         break;
       }
       default:
