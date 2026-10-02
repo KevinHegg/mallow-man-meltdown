@@ -13,8 +13,23 @@ When you (Claude Code) see that, do exactly this:
 2. Find the first prompt marked PENDING (lowest number wins).
 3. Execute that prompt file completely — including its acceptance criteria.
 4. Verify the acceptance criteria yourself before finishing.
-5. Mark the prompt DONE in `prompts/PROGRESS.md` (keep the file's format).
-6. Commit your work, e.g. `prompt2: into-the-horizon valley view`.
+5. Write `prompts/promptN-response.md` (see Response files below).
+6. Mark the prompt DONE in `prompts/PROGRESS.md` (keep the file's format).
+7. Commit your work, including the response file,
+   e.g. `prompt2: into-the-horizon valley view`.
+
+## Response files
+
+`prompts/promptN-response.md` is the project's memory of *why*, not just
+*what*. Finch reads it when reviewing and writing the next prompt. Write it
+honestly — a claimed verification you didn't perform is worse than an
+admitted gap. Include:
+
+- What changed: files created/modified and the key decisions you made.
+- Verification: for each acceptance criterion, the exact commands you ran
+  and what you observed (not just "it works").
+- Deferred or skipped: what you deliberately left out and why.
+- Notes for the next prompt: surprises, tech debt, open questions.
 
 ## Rules
 
