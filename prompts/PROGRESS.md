@@ -8,6 +8,6 @@
 - [x] prompt6.md — boss appearance: marshmallow lumps + frosting mortar re-skin — DONE
 - [x] prompt7.md — paint the world: procedural richness pass toward the poster look — DONE
 - [x] prompt8.md — the slingshot launch: toy opening moment — DONE
-- [ ] prompt9.md — altitude matters: meaningful up/down flight gameplay — PENDING
+- [x] prompt9.md — altitude matters: meaningful up/down flight gameplay — DONE
 - [ ] prompt10.md — the bail-out: continuous rooftop finale, kill the bars — PENDING
 - [ ] prompt11.md — sticky traps and the flood finale — PENDING

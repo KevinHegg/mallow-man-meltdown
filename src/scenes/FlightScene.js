@@ -4,7 +4,7 @@
 import * as Phaser from 'phaser';
 import { DEPTH, G_PX, TIER_COLOR, TIER_LABEL, TUNE } from '../config.js';
 import { Glider } from '../objects/Glider.js';
-import { Beans, GooMallows } from '../objects/Projectiles.js';
+import { Beans, GooMallows, gooAmount } from '../objects/Projectiles.js';
 import { City } from '../objects/City.js';
 import { Controls } from '../objects/Controls.js';
 import { Slingshot } from '../objects/Slingshot.js';
@@ -13,6 +13,7 @@ import { Hud } from '../ui/Hud.js';
 import { drawSky, floatText, flushTrash, makeFx, rand, randInt, routeCollisions } from '../ui/helpers.js';
 import { Projector } from '../view/Projector.js';
 import { Valley } from '../view/Valley.js';
+import { Heights } from '../view/Heights.js';
 import { PropPool, ShadowPool } from '../view/Pools.js';
 import { Wind } from '../view/Wind.js';
 import { Sfx } from '../sfx.js';
@@ -43,6 +44,9 @@ export class FlightScene extends Phaser.Scene {
     this.nextGoo = 2.2;
     this.nextPickup = 7;
     this.nextArch = rand(8, 12); // first arch early, then every ~25–35 s
+    this.nextThermal = 6; // candy-cane thermals: a reward to fly through, ~every 10–14 s
+    this.obstacleCount = 0;
+    this.wasThermal = false;
     this.pt = {};
     this.att = { bank: 0, pitch: 0 }; // eased visual attitude of the glider
     this.kick = 0; // launch speed burst: extra speed fraction, decaying to 0
@@ -78,6 +82,14 @@ export class FlightScene extends Phaser.Scene {
       bottom,
     };
     this.glider = new Glider(this, W / 2, planeY, this.bounds, this.run, this.fx);
+    this.heights = new Heights(this, this.proj, this.valley, {
+      bounds: this.bounds,
+      halfWidth: W / 2 - WALL_INSET,
+      groundY: this.city.top - horizonY,
+      spawnDepth: SPAWN_DEPTH,
+      onGate: () => this.gateHit(),
+      onBank: () => this.bankHit(),
+    });
     this.beans = new Beans(this);
     this.goo = new GooMallows(this, { cityTop: this.city.top + 12, onCity: (m) => this.gooLandsOnCity(m) });
     this.beanViews = new ShadowPool(this, 16, DEPTH.beans);
@@ -179,6 +191,13 @@ export class FlightScene extends Phaser.Scene {
     const intensity = Phaser.Math.Clamp((speed / this.speed - 1) * 0.7 + 0.18 + Math.hypot(gl.vx, gl.vy) / 1400, 0, 1);
     if (!waiting) this.wind.update(dt, speed, intensity);
     this.updateProps(dt, speed);
+    this.heights.update(dt, speed, gl, !holding && !gl.autopilot && !gl.busy);
+    gl.thermal = this.heights.inThermal;
+    if (gl.thermal && !this.wasThermal) {
+      Sfx.thermal();
+      gl.vy = Math.min(gl.vy, 0) - 140; // the updraft catches you
+    }
+    this.wasThermal = gl.thermal;
 
     if (!holding) {
       this.controls.update(dt);
@@ -245,6 +264,11 @@ export class FlightScene extends Phaser.Scene {
       this.valley.launchArch();
       this.nextArch = this.elapsed + rand(25, 35);
     }
+    this.nextThermal -= dt;
+    if (this.nextThermal <= 0) {
+      this.heights.spawnThermal(randInt(-90, 90));
+      this.nextThermal = rand(10, 14);
+    }
   }
 
   // xw: world x on the flight plane (screen offset from centre when it reaches the glider).
@@ -265,16 +289,25 @@ export class FlightScene extends Phaser.Scene {
     this.propPool.release(p);
   }
 
+  // Five kinds share the obstacle slot: three you dodge sideways, two that care about altitude
+  // (a gate to dive under, a frosting bank to climb over). The 2nd obstacle is always a bank and
+  // the 3rd a low gate right behind it, so every run asks for a climb and then a dive early on.
   spawnObstacle() {
     const W = this.scale.width;
     const half = W / 2 - WALL_INSET;
-    const r = Math.random();
-    if (r < 0.35) {
+    const nth = ++this.obstacleCount;
+    const r = nth === 2 ? 0.7 : nth === 3 ? 0.9 : Math.random();
+    if (r >= 0.6) {
+      const bank = r < 0.8;
+      const ok = bank ? this.heights.spawnBank(rand(0.5, 0.68)) : this.heights.spawnGate(nth === 3 ? 0.58 : rand(0.3, 0.6));
+      if (ok) return;
+    }
+    if (r < 0.2 || r >= 0.6) {
       // sugar-cube ledge jutting out of a valley wall
       const left = Math.random() < 0.5;
       const img = this.addProp('ledge', (left ? -1 : 1) * (half - 90));
       img?.setFlipX(!left);
-    } else if (r < 0.7) {
+    } else if (r < 0.4) {
       // licorice gate: fly through the gap
       const b = this.bounds;
       const gapX = randInt(b.left + 50, b.right - 50) - W / 2;
@@ -366,6 +399,23 @@ export class FlightScene extends Phaser.Scene {
       return;
     }
     if (this.glider.bonk(prop.x)) this.fx.spark.explode(6, this.glider.x, this.glider.y - 20);
+  }
+
+  // A candy-cane gate's curtain: knocked down and aside, like any obstacle.
+  gateHit() {
+    const gl = this.glider;
+    if (gl.bonk(gl.x + (Math.random() < 0.5 ? -1 : 1))) this.fx.spark.explode(8, gl.x, gl.y - 24);
+  }
+
+  // A sticky frosting bank: exactly a goo-mallow hit (same goo, same shield and splat rules).
+  bankHit() {
+    const gl = this.glider;
+    const result = gl.applyGoo(gl.x + rand(-30, 30), gooAmount());
+    if (result === 'shielded') Sfx.pop();
+    else if (result === 'splat') {
+      this.fx.drip.explode(8, gl.x, gl.y + 14);
+      this.run.stats.splats++;
+    }
   }
 
   gooLandsOnCity(m) {

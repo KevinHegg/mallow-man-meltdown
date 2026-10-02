@@ -105,6 +105,8 @@ export const TUNE = {
   shakeMax: 2,
   shakeTime: 0.9, // vulnerable wobble duration
   stallTime: 2.6, // seconds caked with no cleanses before the death spiral
+  thermalLift: 420, // px/s a candy-cane thermal raises the steering target while you're inside
+  thermalDrip: 6, // goo drips off this many times faster inside a thermal
 
   // city
   frostPerGoo: 0.1,

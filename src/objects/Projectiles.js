@@ -43,6 +43,9 @@ export class Beans {
   }
 }
 
+// How much goo one goo-mallow hit puts on the glider (sticky frosting banks reuse it).
+export const gooAmount = () => Phaser.Math.FloatBetween(0.95, 1.25);
+
 // Goo-filled marshmallows: gravity-affected sensors. Ones that reach the city frost it.
 export class GooMallows {
   constructor(scene, { cityTop, onCity }) {
@@ -64,7 +67,7 @@ export class GooMallows {
     m.setVelocity(vx / 60, vy / 60);
     m.setAngularVelocity(Phaser.Math.FloatBetween(-0.06, 0.06));
     m.alive = true;
-    m.gooAmt = Phaser.Math.FloatBetween(0.95, 1.25);
+    m.gooAmt = gooAmount();
     this.items.add(m);
     return m;
   }

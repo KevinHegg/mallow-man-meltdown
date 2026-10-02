@@ -950,4 +950,152 @@ export function buildTextures(scene) {
     frostDrip(g, cx - 8, 152, 10, 6);
     for (const x of [tipL, tipR]) frost(g, beads(x - 13, ty + 9, x + 13, ty + 9, 4.5, 5), FROST_PINK, FROST_PINK_EDGE);
   });
+
+  // ---------- Altitude gameplay: gates to dive under, frosting banks to climb over, thermals ----------
+  // Gate: candy-cane legs on the valley walls, a striped crossbar above the glider's ceiling, and a
+  // candy curtain (stretchable strands + a row of candy tips at the hang line) hanging from it.
+  make('gate_leg', 40, 256, (g, w, h) => {
+    caneTube(g, [quadPath(w / 2, -10, w / 2, h / 2, w / 2, h + 10, 80)], 14);
+  });
+  make('gate_bar', 512, 64, (g, w, h) => {
+    caneTube(g, [quadPath(16, h / 2 - 4, w / 2, h / 2 - 4, w - 16, h / 2 - 4, 220)], 20);
+    frost(g, beads(28, h / 2 + 20, w - 28, h / 2 + 20, 4, 9));
+  });
+  const STRANDS = 16;
+  make('gate_strands', 512, 64, (g, w, h) => {
+    const step = w / STRANDS;
+    for (let i = 0; i < STRANDS; i++) {
+      const x = step * (i + 0.5);
+      const c = PAL.candy[i % PAL.candy.length];
+      g.fillStyle(PAL.ink, 1);
+      g.fillRect(x - 5, 0, 10, h);
+      g.fillStyle(c, 1);
+      g.fillRect(x - 3, 0, 6, h);
+      g.fillStyle(lighter(c, 0.6), 1);
+      g.fillRect(x - 2, 0, 2, h);
+    }
+  });
+  make('gate_tips', 512, 48, (g, w, h) => {
+    const step = w / STRANDS;
+    for (let i = 0; i < STRANDS; i++) {
+      const x = step * (i + 0.5);
+      const c = PAL.candy[i % PAL.candy.length];
+      g.fillStyle(PAL.ink, 1);
+      g.fillRect(x - 5, 0, 10, 14);
+      g.fillStyle(c, 1);
+      g.fillRect(x - 3, 0, 6, 14);
+      blob(g, [{ c: [x, h - 15, 13] }], c, darker(c), 2.5);
+      g.fillStyle(darker(c, 0.12), 1);
+      g.fillCircle(x + 3, h - 12, 9);
+      g.fillStyle(c, 1);
+      g.fillCircle(x - 1, h - 16, 10);
+      g.fillStyle(0xffffff, 0.95);
+      g.fillCircle(x - 5, h - 20, 3.5);
+    }
+  });
+
+  // Frosting bank: a puffy, glossy, sticky pink frosting cloud that floats low across the lane.
+  // Its lumpy top edge (texture y ~8) is the line to clear.
+  make('bank', 512, 256, (g, w, h) => {
+    const br = new Phaser.Math.RandomDataGenerator(['bank']);
+    const puffs = [];
+    for (let x = 34; x <= w - 34; x += 46) puffs.push([x, 48 + br.between(-4, 6), br.between(36, 44)]);
+    for (let x = 56; x <= w - 56; x += 58) puffs.push([x, h - 66 + br.between(-6, 6), br.between(34, 42)]);
+    const shapes = [{ rr: [10, 48, w - 20, h - 116, 40] }, ...puffs.map((c) => ({ c }))];
+    const drips = [];
+    for (let x = 70; x < w - 50; x += 64 + br.between(0, 30)) drips.push({ rr: [x - 6, h - 50, 12, br.between(14, 30), 6] });
+    blob(g, [...shapes, ...drips], FROST_PINK_EDGE, darker(FROST_PINK_EDGE, 0.35), 3);
+    // lit body: lighter toward the top, shaded underside, glossy wet highlights
+    g.fillStyle(mix(FROST_PINK, FROST_PINK_EDGE, 0.35), 1);
+    for (const [x, y, r] of puffs) g.fillCircle(x - 2, y - 3, r * 0.9);
+    g.fillRoundedRect(16, 52, w - 32, h - 130, 36);
+    g.fillStyle(FROST_PINK, 1);
+    for (const [x, y, r] of puffs) if (y < h / 2) g.fillCircle(x - 4, y - 6, r * 0.78);
+    g.fillRoundedRect(20, 50, w - 40, (h - 130) * 0.55, 30);
+    g.fillStyle(lighter(FROST_PINK, 0.55), 0.9);
+    for (const [x, y, r] of puffs) if (y < h / 2) g.fillEllipse(x - 12, y - 18, r * 0.8, r * 0.34);
+    g.fillStyle(0xffffff, 1);
+    for (const [x, y, r] of puffs) if (y < h / 2) g.fillEllipse(x - 16, y - 22, r * 0.34, r * 0.14);
+    for (const d of drips) {
+      const [x, y, dw, dh] = d.rr;
+      g.fillStyle(0xffffff, 0.85);
+      g.fillCircle(x + dw * 0.35, y + dh - 3, 2);
+    }
+    // sticky strings and sprinkles
+    g.lineStyle(2, 0xffffff, 0.55);
+    for (let k = 0; k < 7; k++) {
+      const x = br.between(40, w - 40);
+      g.lineBetween(x, br.between(70, 110), x + br.between(-20, 20), br.between(130, 170));
+    }
+    for (let k = 0; k < 50; k++) {
+      g.fillStyle(PAL.candy[k % PAL.candy.length], 1);
+      g.fillRoundedRect(br.between(24, w - 30), br.between(26, h - 110), 7, 3, 1.5);
+    }
+  });
+  make('bank_shadow', 256, 40, (g, w, h) => contactShadow(g, w / 2, h / 2, w, h));
+
+  // Thermal: a vertical tile of translucent rising candy-cane stripes, fading at its edges.
+  make('thermal', 140, 128, (g, w, h) => {
+    for (let x = 0; x < w; x += 4) {
+      const a = Math.pow(Math.sin((Math.PI * (x + 2)) / w), 1.2);
+      g.fillStyle(0xffffff, 0.14 * a);
+      g.fillRect(x, 0, 4, h);
+      for (let k = -2; k <= 4; k++) {
+        const y0 = k * 64 - x * 0.55;
+        for (const [off, len, c, al] of [[0, 20, 0xe8213d, 0.5], [32, 14, 0xffffff, 0.55]]) {
+          const a0 = Math.max(0, y0 + off);
+          const a1 = Math.min(h, y0 + off + len);
+          if (a1 > a0) {
+            g.fillStyle(c, al * a);
+            g.fillRect(x, a0, 4, a1 - a0);
+          }
+        }
+      }
+    }
+    // bright edges where the warm air shimmers
+    for (const ex of [6, w - 10]) {
+      g.fillStyle(0xffffff, 0.35);
+      g.fillRect(ex, 0, 4, h);
+    }
+    const r2 = new Phaser.Math.RandomDataGenerator(['thermal']);
+    for (let k = 0; k < 16; k++) {
+      const x = r2.between(16, w - 16);
+      const y = r2.between(0, h);
+      g.fillStyle(0xffffff, r2.realInRange(0.5, 0.95));
+      for (const dy of [-h, 0, h]) g.fillCircle(x, y + dy, r2.realInRange(1.4, 2.8));
+    }
+  });
+  make('thermal_vent', 160, 56, (g, w, h) => {
+    const cx = w / 2;
+    const cy = h / 2;
+    const rx = 66;
+    const ry = 18;
+    g.fillStyle(PAL.ink, 0.25);
+    g.fillEllipse(cx, cy + 6, rx * 2 + 16, ry * 2 + 10);
+    const n = 28;
+    for (const [pass, lw] of [[0, 16], [1, 11]]) {
+      for (let i = 0; i < n; i++) {
+        const a0 = (i / n) * Math.PI * 2;
+        const a1 = ((i + 1) / n) * Math.PI * 2;
+        g.lineStyle(lw, pass === 0 ? PAL.ink : i % 2 ? 0xe8213d : 0xfbf3f6, 1);
+        g.lineBetween(cx + Math.cos(a0) * rx, cy + Math.sin(a0) * ry, cx + Math.cos(a1) * rx, cy + Math.sin(a1) * ry);
+      }
+    }
+    g.fillStyle(0xfff0f7, 0.9);
+    g.fillEllipse(cx, cy, rx * 1.6, ry * 1.2);
+    g.fillStyle(0xffffff, 1);
+    g.fillEllipse(cx - 10, cy - 2, rx * 0.8, ry * 0.5);
+  });
+
+  // Cue chevron (points down; flipped to point up): a bold candy "V".
+  make('chev', 60, 40, (g, w) => {
+    const v = [[8, 8], [w / 2, 30], [w - 8, 8]];
+    for (const [lw, c] of [[15, PAL.ink], [10, 0xffffff], [5, 0xff5e8a]]) {
+      g.lineStyle(lw, c, 1);
+      g.lineBetween(v[0][0], v[0][1], v[1][0], v[1][1]);
+      g.lineBetween(v[1][0], v[1][1], v[2][0], v[2][1]);
+      g.fillStyle(c, 1);
+      for (const [x, y] of v) g.fillCircle(x, y, lw / 2);
+    }
+  });
 }

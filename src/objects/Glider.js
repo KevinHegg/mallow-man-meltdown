@@ -61,6 +61,7 @@ export class Glider extends Phaser.Events.EventEmitter {
     this.spiraling = false;
     this.crashed = false;
     this.autopilot = null;
+    this.thermal = false; // inside a candy-cane thermal (set by the flight each frame)
     this.tier = 'clean';
 
     this.view = scene.add.container(x, y).setDepth(DEPTH.glider).setScale(ART_SCALE);
@@ -129,9 +130,10 @@ export class Glider extends Phaser.Events.EventEmitter {
       this.targetX = this.autopilot.x;
       this.targetY = this.autopilot.y;
     } else if (!shaking) {
-      // goo weight drags the target down; off-centre goo drags it sideways
+      // goo weight drags the target down; off-centre goo drags it sideways; thermals lift it
       this.targetY += goo * TUNE.sinkPerGoo * dt;
       this.targetX += Math.sin(this.list) * TUNE.listDrift * dt;
+      if (this.thermal) this.targetY -= TUNE.thermalLift * dt;
     }
     this.targetX = clamp(this.targetX, b.left, b.right);
     this.targetY = clamp(this.targetY, b.top, b.bottom);
@@ -209,14 +211,15 @@ export class Glider extends Phaser.Events.EventEmitter {
   }
 
   updateGoo(dt, goo) {
-    // heavier coats harden and drip off more slowly
-    const rate = TUNE.dripBase / (1 + goo * 0.22);
+    // heavier coats harden and drip off more slowly; a thermal's warm air speeds it up
+    const warm = this.thermal ? TUNE.thermalDrip : 1;
+    const rate = (warm * TUNE.dripBase) / (1 + goo * 0.22);
     const splats = this.splats;
     for (let i = splats.length - 1; i >= 0; i--) {
       splats[i].m -= rate * dt;
       if (splats[i].m < 0.08) splats.splice(i, 1); // in place: no per-frame arrays
     }
-    this.coat.drip(goo * 1.4, dt); // drops fall from the coat as it drips off
+    this.coat.drip(goo * 1.4 * warm, dt); // drops fall from the coat as it drips off
   }
 
   // Art transform on top of the physical roll: flight bank/pitch, goo list and wobble,

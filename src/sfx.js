@@ -140,6 +140,12 @@ export const Sfx = {
     [520, 660, 880, 1180].forEach((f, i) => tone(f, f * 1.4, 0.12, { vol: 0.14, delay: i * 0.05 }));
     noise(0.4, { vol: 0.1, freq: 3000, type: 'highpass' });
   },
+  // warm updraft: a soft rising whoosh with a sparkle
+  thermal() {
+    if (!ready('thermal', 0.5)) return;
+    noise(0.7, { vol: 0.12, freq: 400, to: 2200, type: 'bandpass', q: 1.5 });
+    tone(880, 1320, 0.35, { type: 'triangle', vol: 0.06, delay: 0.1 });
+  },
   // rubbery creak ticks while the slingshot bands stretch (k: 0 slack … 1 full pull)
   stretch(k) {
     if (!ready('stretch', 0.05)) return;
