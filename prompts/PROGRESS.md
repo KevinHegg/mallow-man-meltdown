@@ -7,3 +7,4 @@
 - [x] prompt5.md — the boss fights back: staged attacks and melt drama — DONE
 - [x] prompt6.md — boss appearance: marshmallow lumps + frosting mortar re-skin — DONE
 - [x] prompt7.md — paint the world: procedural richness pass toward the poster look — DONE
+- [ ] prompt8.md — the slingshot launch: toy opening moment — PENDING
