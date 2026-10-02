@@ -42,3 +42,15 @@ admitted gap. Include:
   them PENDING in PROGRESS.md. You don't renumber anything, ever.
 - The design source of truth is `DESIGN.md`. Prompts refine it; they never
   contradict it. If a prompt conflicts with DESIGN.md, flag it and wait.
+
+## Working notes (UI rules, from prompt12)
+
+- **Interactive on top.** Controls (buttons, their charge pips, meters) draw at
+  `DEPTH.hud` and above; decorative art stays below it and never occludes them.
+  Controls are solid in every state (opaque plate, thick ink rim) — "unavailable"
+  greys the icon, it never makes the control see-through.
+- **Decorative art must never look interactive.** Nothing round-and-labelled in the
+  screen corners where controls live; windows, signs and props read as architecture.
+- **Two-aspect screenshot check before a prompt is called done:** every scene you
+  touched, at 540×960 *and* a tall phone (19.5:9, e.g. 390×844 logical → a
+  540×1169 canvas), in the browser pane's viewport emulation.

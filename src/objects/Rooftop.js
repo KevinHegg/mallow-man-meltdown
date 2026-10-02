@@ -75,19 +75,12 @@ export class Rooftop {
       g.lineBetween(0, by, W, by);
       for (let bx = (r % 2) * 30; bx < W; bx += 60) g.lineBetween(bx, by - 22, bx, by);
     }
-    for (const wy of [fy + 46, fy + 150]) {
-      if (wy + 70 > H) continue;
-      for (let wx = 40; wx < W - 60; wx += 120) {
-        g.fillStyle(PAL.ink, 1);
-        g.fillRoundedRect(wx - 3, wy - 3, 66, 76, 30);
-        g.fillStyle(0xfff1a8, 1);
-        g.fillRoundedRect(wx, wy, 60, 70, 28);
-        g.fillStyle(0xffffff, 0.75);
-        g.fillRoundedRect(wx + 8, wy + 8, 14, 26, 7);
-        g.fillStyle(PAL.ink, 0.25);
-        g.fillRect(wx + 29, wy + 4, 3, 64);
-        frost(g, beads(wx - 4, wy + 74, wx + 64, wy + 74, 4, 8), FROST_PINK, FROST_PINK_EDGE);
-      }
+    // Windows that read as architecture, not as buttons: framed sash windows with panes, a
+    // frosting lintel, shutters and a flower-box sill, set into the brick. Two columns in the middle
+    // of the facade, so the screen corners (where the HUD controls sit) stay plain wall.
+    for (const wy of [fy + 46, fy + 176]) {
+      if (wy + 104 > H) continue;
+      for (const cx of [W * 0.33, W * 0.67]) this.window(g, cx, wy);
     }
     g.fillStyle(PAL.ink, 0.12);
     g.fillRect(0, H - 70, W, 70);
@@ -95,6 +88,56 @@ export class Rooftop {
     contactShadow(g, W / 2, fy + 6, W * 1.2, 16);
     frost(g, beads(-4, fy, W + 4, fy, 8, 14));
     for (let x = 30; x < W; x += 74) frostDrip(g, x, fy + 4, 12 + ((x / 74) % 3) * 8, 9);
+  }
+
+  window(g, cx, y) {
+    const w = 66;
+    const h = 80;
+    const x = cx - w / 2;
+    // shutters with slats
+    for (const [sx, c] of [[x - 22, 0xff9ec4], [x + w + 2, 0x7ad9a6]]) {
+      g.fillStyle(PAL.ink, 1);
+      g.fillRoundedRect(sx - 2, y - 2, 24, h + 4, 4);
+      g.fillStyle(c, 1);
+      g.fillRoundedRect(sx, y, 20, h, 3);
+      g.fillStyle(mix(c, 0x000000, 0.18), 1);
+      for (let k = 8; k < h - 4; k += 9) g.fillRect(sx + 3, y + k, 14, 3);
+    }
+    // frame, four panes of pale glass, mullions
+    g.fillStyle(PAL.ink, 1);
+    g.fillRect(x - 4, y - 4, w + 8, h + 8);
+    g.fillStyle(0xfffaf3, 1);
+    g.fillRect(x - 2, y - 2, w + 4, h + 4);
+    const pw = (w - 10) / 2;
+    const ph = (h - 10) / 2;
+    for (const [px, py] of [[x + 3, y + 3], [x + 7 + pw, y + 3], [x + 3, y + 7 + ph], [x + 7 + pw, y + 7 + ph]]) {
+      g.fillStyle(0xbfdcf5, 1);
+      g.fillRect(px, py, pw, ph);
+      g.fillStyle(0xe4f2ff, 1);
+      g.fillRect(px, py, pw, ph * 0.4);
+      g.fillStyle(0xffffff, 0.85);
+      g.fillPoints([{ x: px + 4, y: py + ph - 6 }, { x: px + pw - 10, y: py + 4 }, { x: px + pw - 4, y: py + 4 }, { x: px + 10, y: py + ph - 6 }], true);
+    }
+    // frosting lintel with a cherry keystone
+    frost(g, beads(x - 8, y - 9, x + w + 8, y - 9, 5, 8), FROST_PINK, FROST_PINK_EDGE);
+    g.fillStyle(0xe8213d, 1);
+    g.fillCircle(cx, y - 15, 5);
+    g.fillStyle(0xffffff, 0.8);
+    g.fillCircle(cx - 1.5, y - 16.5, 1.5);
+    // sill and a flower box
+    g.fillStyle(PAL.ink, 1);
+    g.fillRoundedRect(x - 10, y + h + 2, w + 20, 10, 3);
+    g.fillStyle(0xfffaf3, 1);
+    g.fillRoundedRect(x - 8, y + h + 3, w + 16, 6, 2);
+    g.fillStyle(0xb57a46, 1);
+    g.fillRoundedRect(x - 2, y + h + 10, w + 4, 12, 3);
+    for (let k = 0; k < 6; k++) {
+      const fx = x + 4 + k * ((w - 8) / 5);
+      g.fillStyle(PAL.candy[k % PAL.candy.length], 1);
+      g.fillCircle(fx, y + h + 9, 4);
+      g.fillStyle(0xfff1a8, 1);
+      g.fillCircle(fx, y + h + 9, 1.5);
+    }
   }
 
   coverAt(x) {

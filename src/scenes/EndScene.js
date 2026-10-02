@@ -60,10 +60,12 @@ export class EndScene extends Phaser.Scene {
     if (from === 'Boss') {
       // the finale was on foot: the gingerbread pilot cheers (or droops, frosty)
       const pilot = buildPilotView(this);
-      pilot.root.setPosition(W / 2, H * 0.6 + 50).setScale(1.5).setDepth(DEPTH.glider);
+      // standing just above FLY AGAIN, never touching it
+      const feet = H * 0.66 - 40;
+      pilot.root.setPosition(W / 2, feet).setScale(1.2).setDepth(DEPTH.glider);
       if (win) {
         pilot.gun.setRotation(-0.4);
-        this.tweens.add({ targets: pilot.root, y: H * 0.6 + 30, duration: 300, yoyo: true, repeat: -1, ease: 'Quad.easeOut' });
+        this.tweens.add({ targets: pilot.root, y: feet - 14, duration: 300, yoyo: true, repeat: -1, ease: 'Quad.easeOut' });
         this.tweens.add({ targets: pilot.gun, rotation: 0.4, duration: 300, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       } else {
         pilot.root.setAngle(-8);
@@ -71,13 +73,14 @@ export class EndScene extends Phaser.Scene {
         pilot.gun.setRotation(1.1);
       }
     } else {
-      const glider = this.add.image(W / 2, H * 0.6, 'glider').setScale(1.4).setDepth(DEPTH.glider);
+      const gy = H * 0.66 - 82; // clear of FLY AGAIN below it
+      const glider = this.add.image(W / 2, gy, 'glider').setScale(1.4).setDepth(DEPTH.glider);
       if (win) {
-        this.tweens.add({ targets: glider, y: H * 0.6 - 14, angle: 6, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        this.tweens.add({ targets: glider, y: gy - 14, angle: 6, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       } else {
         glider.setAngle(-28).setTint(0xb5d8f0);
         if (reason === 'spiral') {
-          [-30, 4, 28].forEach((dx, i) => this.add.image(W / 2 + dx, H * 0.6 + (i % 2) * 6, 'splat').setScale(1.1).setDepth(DEPTH.glider + 1));
+          [-30, 4, 28].forEach((dx, i) => this.add.image(W / 2 + dx, gy + (i % 2) * 6, 'splat').setScale(1.1).setDepth(DEPTH.glider + 1));
         }
         this.tweens.add({ targets: glider, angle: -20, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       }

@@ -85,6 +85,10 @@ export class Pilot extends Phaser.Events.EventEmitter {
     return false;
   }
 
+  get hopperMax() {
+    return HOPPER;
+  }
+
   get canAct() {
     return !this.autopilot && this.shakeT <= 0;
   }

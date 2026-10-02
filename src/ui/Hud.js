@@ -26,6 +26,8 @@ export class Hud {
     this.boostBtn = mode === 'roof' ? null : this.actionButton(62, btnY, 'pk_boost', 'BOOST', onBoost);
     this.shakeBtn = this.actionButton(W - 62, btnY, 'pk_shake', 'SHAKE', onShake);
     this.buttons = this.boostBtn ? [this.boostBtn, this.shakeBtn] : [this.shakeBtn];
+    // on foot, the blaster's bean hopper gets a meter in the corner BOOST used to hold
+    this.hopper = mode === 'roof' ? this.hopperMeter(62, btnY) : null;
 
     this.bannerTitle = txt(scene, W / 2, H * 0.4, '', 46, '#ff5e8a', { stroke: PAL.inkHex, strokeThickness: 10 })
       .setDepth(D + 5)
@@ -54,6 +56,7 @@ export class Hud {
       btn.alpha = null;
       btn.zone.input.enabled = v > 0.5;
     }
+    if (this.hopper) for (const o of [this.hopper.g, this.hopper.lab]) o.setAlpha(v);
   }
 
   // Soft green glow around the screen edges, baked once per screen size; pulses while CAKED.
@@ -101,17 +104,15 @@ export class Hud {
     chip.g.strokeRoundedRect(x, chip.y, w, 28, 14);
   }
 
+  // Interactive controls are drawn solid in every state (opaque plate, drop shadow, thick ink
+  // rim) at the top of the draw order, so no art behind them can ever show through or hide them.
   actionButton(x, y, icon, label, onPress) {
     const scene = this.scene;
     const r = 42;
     const bg = scene.add.graphics({ x, y }).setDepth(D);
-    bg.fillStyle(0xffffff, 0.88);
-    bg.fillCircle(0, 0, r);
-    bg.lineStyle(4, PAL.ink, 1);
-    bg.strokeCircle(0, 0, r);
     const img = scene.add.image(x, y - 6, icon).setScale(0.82).setDepth(D + 1);
     const lab = txt(scene, x, y + r - 9, label, 12, PAL.inkHex, { strokeThickness: 4 }).setDepth(D + 2);
-    const pips = scene.add.graphics({ x, y: y - r - 10 }).setDepth(D + 1);
+    const pips = scene.add.graphics({ x, y: y - r - 13 }).setDepth(D + 1);
     const hit = r * 1.2;
     const zone = scene.add
       .zone(x, y, hit * 2, hit * 2)
@@ -123,39 +124,114 @@ export class Hud {
         scene.tweens.add({ targets: [bg, img], scale: '*=0.85', duration: 70, yoyo: true });
       }
     });
-    return { bg, img, lab, pips, zone, x, y, r, count: -1, alpha: null };
+    const btn = { bg, img, lab, pips, zone, x, y, r, count: -1, usable: null, alpha: null };
+    this.drawPlate(btn, true);
+    return btn;
   }
 
-  // True when the glider's art (not its hitbox) sits under this button.
-  covers(btn, gl) {
-    const hw = 56 * gl.view.scaleX;
-    const hh = 32 * gl.view.scaleY;
-    const cx = Phaser.Math.Clamp(btn.x, gl.x - hw, gl.x + hw);
-    const cy = Phaser.Math.Clamp(btn.y, gl.y - hh, gl.y + hh);
-    return Math.hypot(cx - btn.x, cy - btn.y) < btn.r;
+  drawPlate(btn, usable) {
+    const { bg, r } = btn;
+    bg.clear();
+    bg.fillStyle(PAL.ink, 0.3);
+    bg.fillCircle(0, 4, r + 3);
+    bg.fillStyle(usable ? 0xffffff : 0xece6ef, 1);
+    bg.fillCircle(0, 0, r);
+    bg.fillStyle(usable ? 0xfff0f7 : 0xe2dbe6, 1);
+    bg.fillCircle(0, r * 0.18, r * 0.8);
+    bg.lineStyle(5, PAL.ink, 1);
+    bg.strokeCircle(0, 0, r);
   }
 
-  refreshButton(btn, count, max, enabled, covered) {
-    if (btn.count !== count) {
-      btn.count = count;
-      btn.pips.clear();
-      const gap = 16;
-      for (let i = 0; i < max; i++) {
-        const px = (i - (max - 1) / 2) * gap;
-        btn.pips.fillStyle(i < count ? 0xff5e8a : 0xffffff, 1);
-        btn.pips.fillCircle(px, 0, 6);
-        btn.pips.lineStyle(2, PAL.ink, 1);
-        btn.pips.strokeCircle(px, 0, 6);
+  // Charges as big pips on a dark pill, so they read against any background.
+  drawPips(btn, count, max) {
+    const g = btn.pips;
+    const gap = 21;
+    const w = (max - 1) * gap + 24;
+    g.clear();
+    g.fillStyle(PAL.ink, 0.88);
+    g.fillRoundedRect(-w / 2, -11, w, 22, 11);
+    for (let i = 0; i < max; i++) {
+      const px = (i - (max - 1) / 2) * gap;
+      const full = i < count;
+      g.fillStyle(full ? 0xff5e8a : 0x8a6f86, 1);
+      g.fillCircle(px, 0, 7.5);
+      g.lineStyle(2, 0xffffff, full ? 1 : 0.5);
+      g.strokeCircle(px, 0, 7.5);
+      if (full) {
+        g.fillStyle(0xffffff, 0.9);
+        g.fillCircle(px - 2.5, -2.5, 2.2);
       }
     }
-    // dim when unavailable; fade further while the glider flies underneath so both stay readable
-    const a = (enabled && count > 0 ? 1 : 0.4) * (covered ? 0.45 : 1) * this.shown;
+  }
+
+  refreshButton(btn, count, max, enabled) {
+    if (btn.count !== count) {
+      btn.count = count;
+      this.drawPips(btn, count, max);
+    }
+    // unavailable = greyed icon and label on the same solid plate (never see-through)
+    const usable = enabled && count > 0;
+    if (btn.usable !== usable) {
+      btn.usable = usable;
+      this.drawPlate(btn, usable);
+      if (usable) btn.img.clearTint();
+      else btn.img.setTint(0xb3a9ba);
+      btn.lab.setColor(usable ? PAL.inkHex : '#8f8496');
+    }
+    const a = this.shown;
     if (btn.alpha !== a) {
       btn.alpha = a;
       btn.bg.setAlpha(a);
       btn.img.setAlpha(a);
       btn.lab.setAlpha(a);
     }
+  }
+
+  // The blaster's gumball hopper: a jar that fills with beans (display only, not a button).
+  hopperMeter(x, y) {
+    const g = this.scene.add.graphics({ x, y }).setDepth(D);
+    const lab = txt(this.scene, x, y + 44, 'BEANS', 12, PAL.inkHex, { strokeThickness: 4 }).setDepth(D + 2);
+    return { g, lab, key: '' };
+  }
+
+  drawHopper(ammo, max) {
+    const h = this.hopper;
+    const full = Math.floor(ammo + 1e-6);
+    const empty = ammo < 1;
+    const blink = empty && Math.floor(this.scene.time.now / 180) % 2 === 0;
+    const key = `${Math.floor(ammo * 3)}|${blink}`;
+    if (h.key === key) return;
+    h.key = key;
+    const g = h.g;
+    g.clear();
+    g.fillStyle(PAL.ink, 0.3);
+    g.fillRoundedRect(-27, -30, 54, 70, 14);
+    g.fillStyle(blink ? 0xffd6dc : 0xf2fbff, 1);
+    g.fillRoundedRect(-26, -34, 52, 68, 14);
+    g.lineStyle(4, blink ? 0xd8364f : PAL.ink, 1);
+    g.strokeRoundedRect(-26, -34, 52, 68, 14);
+    g.fillStyle(0xff6f9f, 1);
+    g.fillRoundedRect(-21, -44, 42, 13, 6);
+    g.lineStyle(3, PAL.ink, 1);
+    g.strokeRoundedRect(-21, -44, 42, 13, 6);
+    // beans stack from the bottom; the one refilling fades in
+    for (let i = 0; i < max; i++) {
+      const c = i % 3;
+      const r = Math.floor(i / 3);
+      const bx = -14 + c * 14;
+      const by = 22 - r * 13;
+      const a = i < full ? 1 : i === full ? (ammo - full) * 0.6 : 0;
+      if (a <= 0) continue;
+      g.fillStyle(PAL.ink, a);
+      g.fillEllipse(bx, by, 13, 10);
+      g.fillStyle(PAL.beans[i % PAL.beans.length], a);
+      g.fillEllipse(bx, by, 10, 7);
+      g.fillStyle(0xffffff, 0.8 * a);
+      g.fillCircle(bx - 2, by - 1.5, 1.5);
+    }
+    g.fillStyle(0xffffff, 0.6);
+    g.fillRoundedRect(-21, -28, 6, 40, 3);
+    h.lab.setText(empty ? 'EMPTY!' : 'BEANS').setColor(empty ? '#d8364f' : PAL.inkHex);
   }
 
   banner(title, sub = '', hold = 1500) {
@@ -174,8 +250,9 @@ export class Hud {
     this.setChip(this.frostChip, `CITY FROST ${frost}%`, frost >= 66 ? '#d8364f' : frost >= 33 ? '#3a95c9' : '#7fb8d6');
 
     const ready = gl.canAct;
-    if (this.boostBtn) this.refreshButton(this.boostBtn, gl.boosts, TUNE.boostMax, ready, this.covers(this.boostBtn, gl));
-    this.refreshButton(this.shakeBtn, gl.shakes, TUNE.shakeMax, ready, this.covers(this.shakeBtn, gl));
+    if (this.boostBtn) this.refreshButton(this.boostBtn, gl.boosts, TUNE.boostMax, ready);
+    this.refreshButton(this.shakeBtn, gl.shakes, TUNE.shakeMax, ready);
+    if (this.hopper) this.drawHopper(gl.ammo, gl.hopperMax);
 
     const now = this.scene.time.now;
     const dt = Math.min(0.1, (now - this.lastNow) / 1000);
