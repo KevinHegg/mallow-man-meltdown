@@ -11,3 +11,4 @@
 - [x] prompt9.md — altitude matters: meaningful up/down flight gameplay — DONE
 - [x] prompt10.md — the bail-out: continuous rooftop finale, kill the bars — DONE
 - [x] prompt11.md — sticky traps and the flood finale — DONE
+- [ ] prompt12.md — UI legibility pass: windows that read as UI, flight controls hidden by art, hopper pips — PENDING
