@@ -9,6 +9,7 @@ import { City } from '../objects/City.js';
 import { Controls } from '../objects/Controls.js';
 import { Slingshot } from '../objects/Slingshot.js';
 import { buildPilotView } from '../objects/Pilot.js';
+import { CottonCandy } from '../objects/CottonCandy.js';
 import { buildBossRig } from '../objects/MarshmallowMan.js';
 import { Hud } from '../ui/Hud.js';
 import { drawSky, floatText, flushTrash, makeFx, rand, randInt, routeCollisions } from '../ui/helpers.js';
@@ -35,6 +36,7 @@ const BAIL_COVER = 1.55;
 const BAIL_COVER_TIME = 0.9;
 const BAIL_HANDOVER = 2.6;
 const CHUTE_SCALE = 0.9;
+const TRAPS_FROM = 0.55; // progress at which the boss starts flinging cotton-candy traps
 
 export class FlightScene extends Phaser.Scene {
   constructor() {
@@ -55,6 +57,7 @@ export class FlightScene extends Phaser.Scene {
     this.nextPickup = 7;
     this.nextArch = rand(8, 12); // first arch early, then every ~25–35 s
     this.nextThermal = 6; // candy-cane thermals: a reward to fly through, ~every 10–14 s
+    this.nextTrap = 0; // cotton-candy traps: late in the flight, ~every 7–10 s
     this.obstacleCount = 0;
     this.wasThermal = false;
     this.pt = {};
@@ -100,6 +103,7 @@ export class FlightScene extends Phaser.Scene {
       onGate: () => this.gateHit(),
       onBank: () => this.bankHit(),
     });
+    this.traps = new CottonCandy(this, { mode: 'air', fx: this.fx });
     this.beans = new Beans(this);
     this.goo = new GooMallows(this, { cityTop: this.city.top + 12, onCity: (m) => this.gooLandsOnCity(m) });
     this.beanViews = new ShadowPool(this, 16, DEPTH.beans);
@@ -203,6 +207,7 @@ export class FlightScene extends Phaser.Scene {
     this.updateProps(dt, speed);
     this.heights.update(dt, speed, gl, !holding && !gl.autopilot && !gl.busy);
     gl.thermal = this.heights.inThermal;
+    gl.stuck = this.traps.update(dt, gl.x, gl.y) && !gl.autopilot;
     if (gl.thermal && !this.wasThermal) {
       Sfx.thermal();
       gl.vy = Math.min(gl.vy, 0) - 140; // the updraft catches you
@@ -279,6 +284,30 @@ export class FlightScene extends Phaser.Scene {
       this.heights.spawnThermal(randInt(-90, 90));
       this.nextThermal = rand(10, 14);
     }
+    if (p >= TRAPS_FROM) {
+      this.nextTrap -= dt;
+      if (this.nextTrap <= 0) {
+        this.spawnTrap();
+        this.nextTrap = rand(7, 10);
+      }
+    }
+  }
+
+  // The boss flings a cotton-candy blast at where the glider is heading; it bursts into a
+  // hanging spun-sugar cloud on the flight plane. The landing spot is marked while it flies.
+  spawnTrap() {
+    const gl = this.glider;
+    const b = this.bounds;
+    const s = this.distant.scale;
+    const side = gl.x < this.distant.x ? -1 : 1;
+    const x0 = this.distant.x + side * 100 * s;
+    const y0 = this.distant.y - 250 * s;
+    const T = rand(1.1, 1.3);
+    const tx = Phaser.Math.Clamp(gl.x + gl.vx * T * 0.4, b.left + 30, b.right - 30);
+    const ty = Phaser.Math.Clamp(gl.y + gl.vy * T * 0.3, b.top + 40, b.bottom - 20);
+    if (!this.traps.fire(x0, y0, tx, ty, T)) return;
+    const arm = side < 0 ? this.distantRig.armL : this.distantRig.armR;
+    this.tweens.add({ targets: arm, rotation: -side * 2.6, duration: 200, yoyo: true, ease: 'Sine.easeOut' });
   }
 
   // xw: world x on the flight plane (screen offset from centre when it reaches the glider).
@@ -457,6 +486,7 @@ export class FlightScene extends Phaser.Scene {
     Sfx.arrive();
     this.hud.banner('THE CLOUD!', 'Bail out!', 1300);
     this.goo.popAll(this.fx);
+    this.traps.clear();
     this.glider.cleanAll();
     this.glider.autopilot = { x: W / 2, y: this.bounds.top + 40 };
     this.tweens.add({ targets: this.distant, scale: 1, y: this.proj.horizonY + 60, alpha: 1, duration: 1500, ease: 'Quad.easeIn' });

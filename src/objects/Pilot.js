@@ -36,9 +36,10 @@ export function buildPilotView(scene) {
   const body = scene.add.image(0, -22, 'gb_body').setOrigin(0.5, 1);
   const gun = scene.add.image(0, -44, 'gb_gun').setOrigin(0.5, 0.82);
   const chute = scene.add.image(0, -84, 'chute').setOrigin(0.5, 1).setVisible(false);
+  const strands = scene.add.image(0, -14, 'cc_strands').setScale(0.6, 0.5).setVisible(false);
   const goo = GOO_SLOTS.map((d) => scene.add.image(d.x, d.y, 'gcoat').setScale(d.s).setVisible(false));
-  root.add([chute, legL, legR, body, ...goo, gun]);
-  return { root, legL, legR, body, gun, chute, goo };
+  root.add([chute, legL, legR, body, ...goo, gun, strands]);
+  return { root, legL, legR, body, gun, chute, goo, strands };
 }
 
 export class Pilot extends Phaser.Events.EventEmitter {
@@ -63,6 +64,7 @@ export class Pilot extends Phaser.Events.EventEmitter {
     this.stall = 0; // the HUD's death-spiral warning never applies on foot
     this.autopilot = null; // set while parachuting in: no running, shooting or goo
     this.covered = false;
+    this.stuck = false; // held by a cotton-candy patch (set by the scene each frame)
     this.aim = 0;
     this.ammo = HOPPER;
     this.art = buildPilotView(scene);
@@ -123,7 +125,7 @@ export class Pilot extends Phaser.Events.EventEmitter {
     const mass = 1 + goo * TUNE.massPerGoo;
 
     // run toward the steering target; goo weighs him down
-    const maxV = RUN_SPEED / Math.sqrt(mass);
+    const maxV = (RUN_SPEED / Math.sqrt(mass)) * (this.stuck ? TUNE.trapHold : 1);
     const want = shaking ? 0 : clamp((this.targetX - this.x) * 8, -maxV, maxV);
     this.vx += (want - this.vx) * Math.min(1, dt * RUN_ACCEL);
     this.x = clamp(this.x + this.vx * dt, this.bounds.left, this.bounds.right);
@@ -167,6 +169,7 @@ export class Pilot extends Phaser.Events.EventEmitter {
     const goo = this.goo;
     a.body.setTint(mix(0xffffff, 0xc6f2b0, clamp(goo / TUNE.gooCap, 0, 1)));
     GOO_SLOTS.forEach((d, i) => a.goo[i].setVisible(!shaking && goo >= d.at));
+    a.strands.setVisible(this.stuck).setAlpha(0.6 + Math.sin(this.t * 9) * 0.25);
   }
 
   syncBody() {

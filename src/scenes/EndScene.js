@@ -2,6 +2,8 @@
 import * as Phaser from 'phaser';
 import { DEPTH, PAL } from '../config.js';
 import { City } from '../objects/City.js';
+import { buildPilotView } from '../objects/Pilot.js';
+import { Residents } from '../objects/Residents.js';
 import { drawSky, makeButton, newRun, randInt, snapshot, txt } from '../ui/helpers.js';
 
 const COPY = {
@@ -28,7 +30,10 @@ export class EndScene extends Phaser.Scene {
 
     drawSky(this, win ? [0xffc6e3, 0xffe3f1, 0xd7f0ff, 0xbfe9ff] : [0x8a6fb3, 0xc49ad6, 0xf0c6e0, 0xd6e6f5]);
     const frost = win ? Array(7).fill(0) : reason === 'frost' ? Array(7).fill(1.25) : run.frost;
-    new City(this, { height: 130, frost });
+    const city = new City(this, { height: 130, frost });
+    // the residents on the skyline: cheering after a win, frozen where the frost got them
+    this.residents = new Residents(this, city, DEPTH.city + 1.2);
+    if (win) city.buildings.forEach((b) => this.residents.celebrate(b.i));
 
     if (win) {
       // a static fluff pile and celebratory bean confetti
@@ -52,15 +57,30 @@ export class EndScene extends Phaser.Scene {
       });
     }
 
-    const glider = this.add.image(W / 2, H * 0.6, 'glider').setScale(1.4).setDepth(DEPTH.glider);
-    if (win) {
-      this.tweens.add({ targets: glider, y: H * 0.6 - 14, angle: 6, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    } else {
-      glider.setAngle(-28).setTint(0xb5d8f0);
-      if (reason === 'spiral') {
-        [-30, 4, 28].forEach((dx, i) => this.add.image(W / 2 + dx, H * 0.6 + (i % 2) * 6, 'splat').setScale(1.1).setDepth(DEPTH.glider + 1));
+    if (from === 'Boss') {
+      // the finale was on foot: the gingerbread pilot cheers (or droops, frosty)
+      const pilot = buildPilotView(this);
+      pilot.root.setPosition(W / 2, H * 0.6 + 50).setScale(1.5).setDepth(DEPTH.glider);
+      if (win) {
+        pilot.gun.setRotation(-0.4);
+        this.tweens.add({ targets: pilot.root, y: H * 0.6 + 30, duration: 300, yoyo: true, repeat: -1, ease: 'Quad.easeOut' });
+        this.tweens.add({ targets: pilot.gun, rotation: 0.4, duration: 300, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      } else {
+        pilot.root.setAngle(-8);
+        [pilot.body, pilot.legL, pilot.legR, pilot.gun].forEach((part) => part.setTint(0xb5d8f0));
+        pilot.gun.setRotation(1.1);
       }
-      this.tweens.add({ targets: glider, angle: -20, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    } else {
+      const glider = this.add.image(W / 2, H * 0.6, 'glider').setScale(1.4).setDepth(DEPTH.glider);
+      if (win) {
+        this.tweens.add({ targets: glider, y: H * 0.6 - 14, angle: 6, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      } else {
+        glider.setAngle(-28).setTint(0xb5d8f0);
+        if (reason === 'spiral') {
+          [-30, 4, 28].forEach((dx, i) => this.add.image(W / 2 + dx, H * 0.6 + (i % 2) * 6, 'splat').setScale(1.1).setDepth(DEPTH.glider + 1));
+        }
+        this.tweens.add({ targets: glider, angle: -20, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      }
     }
 
     const head = txt(this, W / 2, H * 0.14, title, 56, win ? '#ff6f9f' : '#9be7ff', { stroke: PAL.inkHex, strokeThickness: 12 }).setDepth(DEPTH.hud);
@@ -119,5 +139,9 @@ export class EndScene extends Phaser.Scene {
     });
 
     this.cameras.main.fadeIn(400, 255, 255, 255);
+  }
+
+  update(_t, delta) {
+    this.residents.update(Math.min(delta / 1000, 0.05));
   }
 }

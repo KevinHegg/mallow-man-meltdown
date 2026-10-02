@@ -107,6 +107,8 @@ export const TUNE = {
   stallTime: 2.6, // seconds caked with no cleanses before the death spiral
   thermalLift: 420, // px/s a candy-cane thermal raises the steering target while you're inside
   thermalDrip: 6, // goo drips off this many times faster inside a thermal
+  trapHold: 0.15, // inside a cotton-candy trap: top speed × this (a boost tears the glider free)
+  trapSpring: 0.2, // …and the glider's pull toward your steering × this
 
   // city
   frostPerGoo: 0.1,

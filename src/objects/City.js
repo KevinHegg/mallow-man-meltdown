@@ -283,6 +283,22 @@ export class City {
     this.drawIce();
   }
 
+  // One building thaws (the finale's flood reaches it), its neighbours stay as they are.
+  thawOne(i, duration) {
+    this.thawing = true;
+    const from = this.frost[i];
+    if (from <= 0) return;
+    this.scene.tweens.addCounter({
+      from,
+      to: 0,
+      duration,
+      onUpdate: (tw) => {
+        this.frost[i] = tw.getValue();
+        this.drawIce();
+      },
+    });
+  }
+
   thaw(duration) {
     this.thawing = true;
     const from = this.frost.slice();

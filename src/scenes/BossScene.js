@@ -3,12 +3,14 @@
 // stages, same attacks, aimed at a target on the ground). Run, dodge, duck behind the chimneys
 // and spray jelly beans to melt him. Goo he throws at the city frosts the skyline behind the roof.
 import * as Phaser from 'phaser';
-import { CAT, DEPTH, TIER_COLOR, TIER_LABEL, TUNE } from '../config.js';
+import { CAT, DEPTH, PAL, TIER_COLOR, TIER_LABEL, TUNE } from '../config.js';
 import { Beans, GooMallows } from '../objects/Projectiles.js';
 import { City } from '../objects/City.js';
 import { MarshmallowMan } from '../objects/MarshmallowMan.js';
 import { Pilot, PilotControls } from '../objects/Pilot.js';
 import { Rooftop } from '../objects/Rooftop.js';
+import { CottonCandy } from '../objects/CottonCandy.js';
+import { Residents } from '../objects/Residents.js';
 import { Hud } from '../ui/Hud.js';
 import { drawSky, floatText, flushTrash, makeFx, rand, randInt, routeCollisions, snapshot } from '../ui/helpers.js';
 import { CloudCover } from '../view/CloudCover.js';
@@ -20,6 +22,12 @@ const PART_AT = 0.25; // s: the cloud wall starts to part…
 const PART_TIME = 1.1; // …and is gone this long after
 const FALL_BAILOUT = 1.9; // s: parachuting from the cloud down to the roof
 const FALL_DROPIN = 1.3; // s: a retry drops in from above the screen
+const TRAP_EVERY = [7, 10]; // s between cotton-candy blasts at the roof
+const FLOOD_AT = 0.5; // the finale (s after he melts): the flood starts rising…
+const THAW_AT = 1.3; // …reaches the first building…
+const THAW_STEP = 0.26; // …and the next, spreading out from the middle
+const SAVED_AT = 3.6; // "Candy City is saved!" and a rainbow
+const FINALE_END = 8.2; // on to the score screen
 
 export class BossScene extends Phaser.Scene {
   constructor() {
@@ -58,6 +66,9 @@ export class BossScene extends Phaser.Scene {
     }
     this.roof = new Rooftop(this, { roofY });
     this.fx = makeFx(this);
+    this.residents = new Residents(this, this.city, DEPTH.city + 1.2);
+    this.traps = new CottonCandy(this, { mode: 'roof', roofY, fx: this.fx });
+    this.nextTrap = 6;
 
     // the boss looms over the roof at giant scale, his cloud hovering just above the skyline
     // (the cloud art reaches ~142 units below his feet)
@@ -178,6 +189,14 @@ export class BossScene extends Phaser.Scene {
       }
     }
     const boss = this.boss;
+    p.stuck = this.traps.update(dt, p.x, p.y) && !p.autopilot && !this.ended;
+    if (boss.active && !boss.dead && !this.ended) {
+      this.nextTrap -= dt;
+      if (this.nextTrap <= 0) {
+        this.spawnTrap();
+        this.nextTrap = rand(TRAP_EVERY[0], TRAP_EVERY[1]);
+      }
+    }
     p.update(dt, boss.x, boss.homeY - 140 * boss.scale);
     boss.update(dt, p);
     this.beans.update(dt);
@@ -185,6 +204,12 @@ export class BossScene extends Phaser.Scene {
     this.updateBossGoo(dt);
     this.city.update(dt);
     this.roof.update(dt);
+    this.residents.update(dt);
+    if (this.flood) {
+      this.flood.tilePositionX += dt * 40;
+      this.floodFront.tilePositionX -= dt * 55;
+    }
+    if (this.ended && this.won) this.hud.setShown(Math.max(0, this.hud.shown - dt * 2));
     this.hud.update();
 
     if (!this.ended && this.city.total >= 1) this.lose('frost');
@@ -253,6 +278,15 @@ export class BossScene extends Phaser.Scene {
     Sfx.burst();
   }
 
+  // A cotton-candy blast from his hand at where the pilot is heading: it lands as a sticky patch.
+  spawnTrap() {
+    const p = this.pilot;
+    const hand = this.boss.handWorld('R');
+    const T = rand(1.1, 1.3);
+    const tx = clamp(p.x + p.vx * T * 0.4 + rand(-30, 30), 60, this.scale.width - 60);
+    this.traps.fire(hand.x, hand.y, tx, this.roofY - 6, T);
+  }
+
   fire() {
     const shot = this.pilot.tryFire();
     if (!shot) return;
@@ -313,35 +347,99 @@ export class BossScene extends Phaser.Scene {
     }
   }
 
-  // Win: the boss melts, a flood of mini marshmallows pours down and piles up (Matter bodies).
+  // Win, staged as the payoff: he melts away, his marshmallow spills off the cloud and floods the
+  // streets, the warm fluff thaws the city building by building (from the middle out), the frozen
+  // residents warm up and celebrate, colour returns with a rainbow, and the pilot cheers.
   finale() {
     if (this.ended) return;
     this.ended = true;
+    this.won = true;
     const { width: W, height: H } = this.scale;
+    const p = this.pilot;
     this.boss.active = false;
     this.goo.popAll(this.fx);
-    this.pilot.cleanAll();
+    this.traps.clear();
+    p.cleanAll();
+    p.stuck = false;
     this.controls.enabled = false;
-    this.tweens.add({ targets: this.pilot.view, y: this.pilot.y - 40, duration: 260, yoyo: true, repeat: 3, ease: 'Quad.easeOut' });
-    this.hud.banner('MELTDOWN!', 'The city is saved!', 4000);
+    this.city.thawing = true;
+    this.hud.banner('MELTDOWN!', '', 2400);
     Sfx.win();
-    this.city.thaw(3200);
 
+    // the flood: a fluffy marshmallow surface surging through the streets behind the roof (up the
+    // buildings, then settling), and filling the street below our roof too…
+    const surge = this.city.groundY - (this.city.groundY - this.city.top) * 0.4;
+    this.flood = this.add.tileSprite(W / 2, this.roofY + 6, W, this.roofY + 6 - this.city.top + 60, 'flood').setOrigin(0.5, 0).setDepth(DEPTH.city + 1.5);
+    this.tweens.chain({
+      targets: this.flood,
+      tweens: [
+        { y: surge, duration: 1300, delay: FLOOD_AT * 1000, ease: 'Sine.easeOut' },
+        { y: this.city.groundY - 26, duration: 1600, ease: 'Sine.easeInOut' },
+      ],
+    });
+    this.floodFront = this.add.tileSprite(W / 2, H + 10, W, 260, 'flood').setOrigin(0.5, 0).setDepth(DEPTH.city + 2.6);
+    this.tweens.add({ targets: this.floodFront, y: H - 150, duration: 1800, delay: (FLOOD_AT + 0.4) * 1000, ease: 'Sine.easeOut' });
+    // …fed by fluff spilling off his cloud, which piles up in the street below the roof
     const solid = { isStatic: true, label: 'ground', collisionFilter: { category: CAT.ground, mask: CAT.fluff } };
     this.matter.add.rectangle(W / 2, H + 30, W * 2, 60, solid);
     this.matter.add.rectangle(-30, H / 2, 60, H * 2, solid);
     this.matter.add.rectangle(W + 30, H / 2, 60, H * 2, solid);
-    this.time.addEvent({ delay: 26, repeat: 150, callback: () => this.spawnFluff() });
+    this.time.addEvent({ delay: 30, repeat: 120, callback: () => this.spawnFluff() });
 
-    this.time.delayedCall(5600, () => {
+    // the warm fluff thaws the city from the middle out; each resident warms up and celebrates
+    this.residents.confetti = this.add
+      .particles(0, 0, 'spark', {
+        emitting: false,
+        maxAliveParticles: 40,
+        lifespan: 900,
+        speed: { min: 60, max: 160 },
+        angle: { min: 230, max: 310 },
+        gravityY: 260,
+        scale: { start: 0.8, end: 0.2 },
+        tint: PAL.beans,
+      })
+      .setDepth(DEPTH.fx);
+    const mid = (this.city.buildings.length - 1) / 2;
+    const order = this.city.buildings.map((b) => b).sort((a, b) => Math.abs(a.i - mid) - Math.abs(b.i - mid));
+    order.forEach((b, k) =>
+      this.time.delayedCall((THAW_AT + k * THAW_STEP) * 1000, () => {
+        this.city.thawOne(b.i, 700);
+        this.fx.flake.explode(8, b.x + b.w / 2, this.city.top + 30);
+        this.fx.puff.explode(4, b.x + b.w / 2, this.city.groundY - 10);
+        this.residents.celebrate(b.i);
+        Sfx.thaw();
+      }),
+    );
+
+    // colour returns: a rainbow over the saved city, and the pilot celebrates with bean fireworks
+    const rainbow = this.add.image(W / 2, this.city.top + 30, 'rainbow').setOrigin(0.5, 1).setDepth(DEPTH.far + 0.5).setAlpha(0);
+    this.time.delayedCall(SAVED_AT * 1000, () => {
+      this.tweens.add({ targets: rainbow, alpha: 0.85, duration: 1200 });
+      this.hud.banner('CANDY CITY IS SAVED!', 'The warm fluff thawed everyone', 3200);
+      Sfx.arrive();
+    });
+    p.art.legL.rotation = 0;
+    p.art.legR.rotation = 0;
+    this.tweens.add({ targets: p.view, y: p.y - 36, duration: 240, yoyo: true, repeat: 9, delay: 600, ease: 'Quad.easeOut' });
+    this.time.delayedCall(900, () =>
+      this.time.addEvent({
+        delay: 160,
+        repeat: 24,
+        callback: () => this.beans.fire({ x: p.x, y: p.y - 100, angle: -Math.PI / 2 + rand(-0.5, 0.5), life: 0.9 }),
+      }),
+    );
+
+    this.time.delayedCall(FINALE_END * 1000, () => {
       this.cameras.main.fadeOut(600, 255, 255, 255);
       this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('End', { result: 'win', from: 'Boss' }));
     });
   }
 
+  // a mini marshmallow spilling off his cloud
   spawnFluff() {
     const W = this.scale.width;
-    const f = this.matter.add.image(randInt(20, W - 20), rand(-80, -20), `fluff${randInt(0, 1)}`, null, {
+    const cx = clamp(this.boss.x, 120, W - 120);
+    const f = this.matter.add.image(cx + rand(-130, 130), this.boss.cloud.y + rand(-10, 20), `fluff${randInt(0, 1)}`, null, {
       shape: { type: 'rectangle', width: 26, height: 18 },
       chamfer: { radius: 6 },
       restitution: 0.2,
@@ -351,7 +449,7 @@ export class BossScene extends Phaser.Scene {
       collisionFilter: { category: CAT.fluff, mask: CAT.fluff | CAT.ground },
     });
     f.setDepth(DEPTH.fluff).setAngle(randInt(0, 360));
-    f.setVelocity(rand(-1, 1), rand(1, 3));
+    f.setVelocity(rand(-2.5, 2.5), rand(0, 2));
     f.setAngularVelocity(rand(-0.1, 0.1));
   }
 

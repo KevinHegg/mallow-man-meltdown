@@ -140,6 +140,23 @@ export const Sfx = {
     [520, 660, 880, 1180].forEach((f, i) => tone(f, f * 1.4, 0.12, { vol: 0.14, delay: i * 0.05 }));
     noise(0.4, { vol: 0.1, freq: 3000, type: 'highpass' });
   },
+  // cotton-candy blast: a soft whump on launch, a sticky fwoomp when it bursts
+  ccFire() {
+    if (!ready('ccFire', 0.2)) return;
+    noise(0.3, { vol: 0.16, freq: 300, to: 900, type: 'bandpass', q: 1.4 });
+    tone(330, 520, 0.2, { type: 'triangle', vol: 0.1 });
+  },
+  ccBurst() {
+    if (!ready('ccBurst', 0.2)) return;
+    noise(0.45, { vol: 0.22, freq: 1400, to: 250, type: 'bandpass', q: 0.9 });
+    tone(620, 310, 0.3, { vol: 0.12 });
+  },
+  // a building thaws in the warm fluff
+  thaw() {
+    if (!ready('thaw', 0.12)) return;
+    arp([784, 988, 1175], 0.05, { type: 'triangle', vol: 0.09 });
+    noise(0.3, { vol: 0.06, freq: 4000, type: 'highpass' });
+  },
   // the pilot pops out of the cockpit
   bail() {
     if (!ready('bail', 0.5)) return;

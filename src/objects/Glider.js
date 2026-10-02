@@ -62,13 +62,15 @@ export class Glider extends Phaser.Events.EventEmitter {
     this.crashed = false;
     this.autopilot = null;
     this.thermal = false; // inside a candy-cane thermal (set by the flight each frame)
+    this.stuck = false; // held by a cotton-candy trap (set by the flight each frame)
     this.tier = 'clean';
 
     this.view = scene.add.container(x, y).setDepth(DEPTH.glider).setScale(ART_SCALE);
     this.sprite = scene.add.image(0, 0, 'glider');
     this.gooLayer = scene.add.container(0, 0);
     this.shield = scene.add.image(0, 0, 'bubble').setScale(4).setAlpha(0);
-    this.view.add([this.sprite, this.gooLayer, this.shield]);
+    this.strands = scene.add.image(0, 0, 'cc_strands').setScale(0.8).setVisible(false);
+    this.view.add([this.sprite, this.gooLayer, this.strands, this.shield]);
     this.coat = new GooCoat(scene, this.gooLayer, fx);
 
     this.body = scene.matter.add.rectangle(x, y, 92, 40, {
@@ -125,6 +127,8 @@ export class Glider extends Phaser.Events.EventEmitter {
 
     const shaking = this.shakeT > 0;
     if (shaking) this.shakeT -= dt;
+    const held = this.stuck && this.boostT <= 0; // a boost tears free of a trap
+    this.strands.setVisible(this.stuck).setAlpha(0.6 + Math.sin(this.t * 9) * 0.25);
 
     if (this.autopilot) {
       this.targetX = this.autopilot.x;
@@ -146,13 +150,15 @@ export class Glider extends Phaser.Events.EventEmitter {
     } else {
       // Stiffness falls with mass while damping falls with √mass: the damping ratio stays
       // constant, so goo makes the glider genuinely slower to respond (not just bouncier).
+      // A cotton-candy trap weakens the pull toward your steering.
       const c = TUNE.damping / Math.sqrt(mass);
-      ax = (TUNE.springK * (this.targetX - this.x)) / mass - c * this.vx;
-      ay = (TUNE.springK * (this.targetY - this.y)) / mass - c * this.vy;
+      const k = TUNE.springK * (held ? TUNE.trapSpring : 1);
+      ax = (k * (this.targetX - this.x)) / mass - c * this.vx;
+      ay = (k * (this.targetY - this.y)) / mass - c * this.vy;
     }
     this.vx += ax * dt;
     this.vy += ay * dt;
-    const cap = TUNE.maxSpeed / Math.sqrt(mass);
+    const cap = (TUNE.maxSpeed / Math.sqrt(mass)) * (held ? TUNE.trapHold : 1);
     const speed = Math.hypot(this.vx, this.vy);
     if (speed > cap && !this.autopilot && this.boostT <= 0 && this.stun <= 0) {
       this.vx *= cap / speed;

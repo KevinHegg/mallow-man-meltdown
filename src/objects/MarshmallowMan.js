@@ -239,6 +239,7 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
     const sgn = side === 'L' ? 1 : -1;
     const tweens = this.scene.tweens;
     this.throwing = true;
+    this.throwArm = arm;
     arm.busy = true;
     this.throwT = st.interval * Phaser.Math.FloatBetween(0.85, 1.15);
     Sfx.windup();
@@ -424,6 +425,8 @@ export class MarshmallowMan extends Phaser.Events.EventEmitter {
     const arm = this.rig.armL;
     const root = this.rig.root;
     this.scene.tweens.killTweensOf(arm);
+    // a throw in progress with this arm dies with it: free him to attack again
+    if (this.throwArm === arm) this.throwing = false;
     arm.busy = true;
     arm.setVisible(false);
     this.rig.stump.setVisible(true);

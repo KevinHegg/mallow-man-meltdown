@@ -1239,4 +1239,130 @@ export function buildTextures(scene) {
     g.fillStyle(0xffffff, 0.8);
     g.fillEllipse(w / 2 - 8, 13, 10, 3);
   });
+
+  // ---------- Cotton-candy sticky traps, residents, the flood ----------
+  const CC = [0xffa8d4, 0xff8fc6, 0xffc2e3, 0xe7a8ff, 0xffd6ec];
+  // spun sugar: a soft pink body wrapped in glossy fibres
+  const spunSugar = (g, cx, cy, rx, ry, seed, fibres) => {
+    const r2 = new Phaser.Math.RandomDataGenerator([seed]);
+    for (let k = 0; k < 9; k++) {
+      g.fillStyle(CC[k % CC.length], 0.55);
+      g.fillEllipse(cx + r2.realInRange(-0.45, 0.45) * rx, cy + r2.realInRange(-0.35, 0.35) * ry, rx * r2.realInRange(0.8, 1.2), ry * r2.realInRange(0.7, 1.1));
+    }
+    for (let k = 0; k < fibres; k++) {
+      const a0 = r2.realInRange(0, Math.PI * 2);
+      const a1 = a0 + r2.realInRange(1.2, 2.6);
+      const rr = r2.realInRange(0.35, 1);
+      g.lineStyle(r2.realInRange(1, 2.2), r2.pick([0xffffff, 0xff7fbf, 0xffb3dc, 0xd99bff]), r2.realInRange(0.5, 0.9));
+      g.beginPath();
+      for (let i = 0; i <= 10; i++) {
+        const a = a0 + ((a1 - a0) * i) / 10;
+        const x = cx + Math.cos(a) * rx * rr * 0.5;
+        const y = cy + Math.sin(a) * ry * rr * 0.5;
+        if (i) g.lineTo(x, y);
+        else g.moveTo(x, y);
+      }
+      g.strokePath();
+    }
+    g.fillStyle(0xffffff, 0.85);
+    g.fillEllipse(cx - rx * 0.18, cy - ry * 0.22, rx * 0.3, ry * 0.12);
+    g.fillCircle(cx + rx * 0.2, cy - ry * 0.1, 2.5);
+  };
+  make('cotton', 210, 160, (g, w, h) => spunSugar(g, w / 2, h / 2, 150, 108, 'cotton', 60));
+  make('cc_patch', 190, 60, (g, w, h) => {
+    spunSugar(g, w / 2, h / 2 + 6, 146, 32, 'patch', 34);
+    const r2 = new Phaser.Math.RandomDataGenerator(['patch-up']);
+    for (let k = 0; k < 9; k++) {
+      const x = r2.between(20, w - 20);
+      g.lineStyle(1.6, 0xffffff, 0.8);
+      g.lineBetween(x, h / 2, x + r2.between(-6, 6), r2.between(2, 12));
+    }
+  });
+  make('cc_blast', 60, 60, (g, w, h) => {
+    spunSugar(g, w / 2, h / 2, 42, 42, 'blast', 18);
+    g.lineStyle(2, PAL.ink, 0.6);
+    g.strokeCircle(w / 2, h / 2, 22);
+  });
+  make('cc_strands', 140, 80, (g, w, h) => {
+    const r2 = new Phaser.Math.RandomDataGenerator(['strands']);
+    for (let k = 0; k < 26; k++) {
+      g.lineStyle(r2.realInRange(1, 2), r2.pick([0xffffff, 0xff7fbf, 0xffb3dc]), 0.85);
+      const x0 = r2.between(4, w - 4);
+      const y0 = r2.between(4, h - 4);
+      g.lineBetween(x0, y0, x0 + r2.between(-40, 40), y0 + r2.between(-20, 20));
+    }
+  });
+  make('cc_ring', 120, 50, (g, w, h) => {
+    g.lineStyle(4, 0xff5ea8, 0.9);
+    g.strokeEllipse(w / 2, h / 2, w - 8, h - 8);
+    g.lineStyle(2, 0xffffff, 0.9);
+    g.strokeEllipse(w / 2, h / 2, w - 20, h - 18);
+  });
+
+  // a resident of Candy City: a little gingerbread person (arms down / arms up cheering)
+  for (const [key, up] of [['resident', false], ['resident_cheer', true]]) {
+    make(key, 40, 48, (g) => {
+      const arms = up ? [{ rr: [2, 4, 8, 20, 4] }, { rr: [30, 4, 8, 20, 4] }] : [{ rr: [3, 20, 8, 16, 4] }, { rr: [29, 20, 8, 16, 4] }];
+      blob(g, [{ c: [20, 12, 10] }, { rr: [10, 20, 20, 20, 8] }, { rr: [11, 36, 7, 12, 3] }, { rr: [22, 36, 7, 12, 3] }, ...arms], COOKIE, COOKIE_DARK, 2);
+      g.fillStyle(COOKIE_LIGHT, 1);
+      g.fillCircle(17, 9, 5);
+      g.fillStyle(PAL.ink, 1);
+      g.fillCircle(16, 11, 1.6);
+      g.fillCircle(24, 11, 1.6);
+      g.lineStyle(1.8, 0xffffff, 1);
+      g.beginPath();
+      g.arc(20, 14, 3.5, 0.3, Math.PI - 0.3);
+      g.strokePath();
+      for (const [y, c] of [[26, 0xe8213d], [32, 0x5bd16b]]) {
+        g.fillStyle(c, 1);
+        g.fillCircle(20, y, 2.2);
+      }
+    });
+  }
+
+  // the marshmallow flood's surface: a soft fluffy wave band that tiles sideways
+  make('flood', 256, 140, (g, w, h) => {
+    const r2 = new Phaser.Math.RandomDataGenerator(['flood']);
+    g.fillStyle(0xf3e0ec, 1);
+    g.fillRect(0, 40, w, h - 40);
+    for (let x = -32; x <= w + 32; x += 32) {
+      const y = 36 + Math.sin((x / w) * Math.PI * 4) * 8;
+      for (const dx of [-w, 0, w]) {
+        g.fillStyle(0xf3e0ec, 1);
+        g.fillCircle(x + dx, y + 6, 26);
+        g.fillStyle(0xfffaf3, 1);
+        g.fillCircle(x + dx - 3, y, 22);
+        g.fillStyle(0xffffff, 1);
+        g.fillEllipse(x + dx - 8, y - 9, 14, 6);
+      }
+    }
+    g.fillStyle(0xfffaf3, 1);
+    g.fillRect(0, 56, w, h - 56);
+    for (let k = 0; k < 24; k++) {
+      g.fillStyle(r2.pick([0xffe0ef, 0xf3e0ec, 0xffffff]), 1);
+      const x = r2.between(0, w);
+      const y = r2.between(70, h - 10);
+      for (const dx of [-w, 0, w]) g.fillRoundedRect(x + dx, y, 22, 14, 6);
+    }
+  });
+
+  make('rainbow', 520, 270, (g, w, h) => {
+    const cols = [0xff6f9f, 0xffa64d, 0xffd84d, 0x7ad9a6, 0x5ec8ff, 0x9a7bff];
+    cols.forEach((c, i) => {
+      g.lineStyle(16, c, 0.55);
+      g.beginPath();
+      g.arc(w / 2, h, w / 2 - 12 - i * 15, Math.PI, Math.PI * 2);
+      g.strokePath();
+    });
+  });
+  // a frozen resident's ice block
+  make('ice_block', 32, 40, (g, w, h) => {
+    g.fillStyle(PAL.frostLine, 0.9);
+    g.fillRoundedRect(0, 0, w, h, 6);
+    g.fillStyle(PAL.frost, 0.75);
+    g.fillRoundedRect(2, 2, w - 4, h - 4, 5);
+    g.fillStyle(0xffffff, 0.9);
+    g.fillRoundedRect(5, 4, 5, h - 14, 2.5);
+    g.fillRect(13, 5, 8, 3);
+  });
 }
